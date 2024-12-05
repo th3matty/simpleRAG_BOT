@@ -1,0 +1,19 @@
+# API Framework
+fastapi>=0.109.0
+uvicorn>=0.27.0
+
+# Vector Database
+chromadb>=0.4.22
+
+# LLM & Embeddings
+anthropic>=0.8.0
+sentence-transformers>=2.3.1
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+
+# Testing
+pytest>=8.0.0
+httpx>=0.26.0  # For async HTTP client in tests
