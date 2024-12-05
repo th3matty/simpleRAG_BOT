@@ -1,154 +1,141 @@
-# RAG Chatbot
+# RAG (Retrieval-Augmented Generation) System
 
-A Retrieval-Augmented Generation (RAG) chatbot built with FastAPI, ChromaDB, and Claude AI. This chatbot can answer questions based on your documents by combining document retrieval with AI-powered text generation.
+A robust RAG system built with FastAPI, ChromaDB, and Anthropic's Claude for intelligent document retrieval and question answering.
+
+## Features
+
+- **Vector Database**: ChromaDB for efficient similarity search
+- **Embeddings**: Sentence transformers for document and query embedding
+- **LLM Integration**: Claude 3 for natural language generation
+- **API Interface**: FastAPI with automatic documentation
+- **Error Handling**: Comprehensive error handling and logging
+- **Configuration**: Flexible configuration system with validation
 
 ## Project Structure
 
 ```
 backend/
 ├── app/
-│   ├── init.py
-│   ├── main.py           # FastAPI app
-│   ├── config.py         # Configuration
-│   ├── database.py       # Chroma setup
 │   ├── routes/
-│   │   └── chat.py       # Chat endpoints
-│   └── services/
-│       ├── llm.py        # LLM integration
-│       └── embeddings.py  # Text processing
+│   │   └── chat.py         # API endpoints
+│   ├── services/
+│   │   ├── embeddings.py   # Embedding generation
+│   │   └── llm.py         # LLM interaction
+│   ├── config.py          # Configuration management
+│   ├── database.py        # Database operations
+│   ├── exceptions.py      # Custom exceptions
+│   └── main.py           # Application entry point
 ├── scripts/
-│   └── load_test_data.py # Test data loader
-├── tests/
-├── .env
-└── requirements.txt
+│   └── load_test_data.py  # Data loading utility
+├── tests/                # Test suite
+├── .env.example         # Environment variables template
+└── logs/               # Application logs
 ```
 
-## Prerequisites
+## Setup
 
-- Python 3.10 or higher
-- Anthropic API key (for Claude)
-
-## Installation
-
-Clone the repository:
+1. Clone the repository:
 
 ```bash
 git clone <repository-url>
-cd rag-chatbot
+cd build_rag
 ```
 
-Create and activate a virtual environment:
+2. Create and activate a virtual environment:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Linux/Mac
-
-or
-.venv\Scripts\activate    # On Windows
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-Install dependencies:
+3. Install dependencies:
 
 ```bash
-pip install fastapi uvicorn anthropic chromadb pydantic-settings python-dotenv sentence-transformers
+pip install -r requirements.txt
 ```
 
-Create a .env file in the backend directory:
+4. Configure environment variables:
 
 ```bash
-cd backend
-echo "ANTHROPIC_API_KEY=your-api-key-here" > .env
-echo "CHROMA_PERSIST_DIRECTORY=./chroma_db" >> .env
+cp backend/.env.example backend/.env
+# Edit .env with your settings
 ```
 
-Replace `your-api-key-here` with your actual Anthropic API key.
+Required environment variables:
 
-## Running the Application
+- `ANTHROPIC_API_KEY`: Your Anthropic API key
+- See `.env.example` for all available configuration options
 
-Start the FastAPI server:
+## Usage
+
+1. Start the server:
 
 ```bash
 cd backend
 uvicorn app.main:app --reload
 ```
 
-Load test documents (optional):
+2. The API will be available at `http://localhost:8000`
+
+3. API Endpoints:
+
+- POST `/chat`: Submit a query and get a response with sources
+- GET `/debug/documents`: List all documents in the database
+
+## API Documentation
+
+Once the server is running, visit:
+
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## Configuration
+
+The system can be configured through environment variables:
+
+### Model Settings
+
+- `MODEL_NAME`: LLM model to use (default: claude-3-sonnet-20240229)
+- `EMBEDDING_MODEL`: Embedding model (default: all-MiniLM-L6-v2)
+
+### Chat Settings
+
+- `MAX_CONTEXT_LENGTH`: Maximum context length (default: 2000)
+- `TEMPERATURE`: LLM temperature (default: 0.7)
+- `MAX_TOKENS`: Maximum response tokens (default: 500)
+- `TOP_K_RESULTS`: Number of similar documents to retrieve (default: 3)
+
+### Logging
+
+- `LOG_LEVEL`: Logging level (default: INFO)
+- `LOG_FILE`: Log file path (default: logs/app.log)
+
+## Error Handling
+
+The system implements a comprehensive error handling system:
+
+- `RAGException`: Base exception for all custom exceptions
+- `DatabaseError`: Database operation failures
+- `EmbeddingError`: Embedding generation issues
+- `LLMError`: LLM interaction problems
+- `ConfigurationError`: Configuration validation errors
+
+## Development
+
+### Adding New Documents
+
+Use the load_test_data.py script:
 
 ```bash
-python scripts/load_test_data.py
+python backend/scripts/load_test_data.py --input_dir path/to/documents
 ```
 
-The server will be running at `http://localhost:8000\`
-
-## Usage
-
-### API Endpoints
-
-#### Chat Endpoint
-
-- URL: `/api/chat`
-- Method: `POST`
-- Request Body:
-
-```json
-{
-  "query": "Your question here"
-}
-```
-
-### Testing the API
-
-Using Swagger UI:
-
-- Open `http://localhost:8000/docs\` in your browser
-- Try out the chat endpoint
-  Using curl:
+### Running Tests
 
 ```bash
-curl -X POST "http://localhost:8000/api/chat"
--H "Content-Type: application/json"
--d '{"query": "What is Python?"}'
+pytest backend/tests/
 ```
-
-Using Python requests:
-
-```python
-import requests
-
-response = requests.post(
-"http://localhost:8000/api/chat",
-json={"query": "What is Python?"}
-)
-print(response.json())
-```
-
-## Features
-
-- Document retrieval using ChromaDB
-- AI-powered responses using Claude
-- Sentence transformer embeddings
-- FastAPI backend with async support
-- CORS middleware for frontend integration
-- Environment-based configuration
-
-## Contributing
-
-Fork the repository
-Create a feature branch
-Commit your changes
-Push to the branch
-Create a Pull Request
 
 ## License
 
-[Your chosen license]
-
-## TODO
-
-- [ ] Add frontend implementation
-- [ ] Add more document processors
-- [ ] Implement caching
-- [ ] Add authentication
-- [ ] Add rate limiting
-- [ ] Add more test coverage
-- [ ] Add Notion integration
+[MIT License](LICENSE)

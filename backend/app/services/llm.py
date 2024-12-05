@@ -1,31 +1,98 @@
 from anthropic import Anthropic
-from typing import List
+from typing import List, Dict, Any
+from ..exceptions import LLMError
+from ..config import settings, logger
 
 class LLMService:
-    def __init__(self, api_key: str):
-        self.client = Anthropic(api_key=api_key)
+    _instance = None
+
+    def __new__(cls, api_key: str):
+        if cls._instance is None:
+            cls._instance = super(LLMService, cls).__new__(cls)
+            try:
+                logger.info("Initializing Anthropic client")
+                cls._instance.client = Anthropic(api_key=api_key)
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic client: {str(e)}")
+                raise LLMError(f"Failed to initialize Anthropic client: {str(e)}")
+        return cls._instance
+
+    def _prepare_context(self, context: List[str]) -> str:
+        """
+        Prepare context for the LLM by joining and truncating if necessary.
         
+        Args:
+            context: List of context strings
+            
+        Returns:
+            Formatted context string
+        """
+        combined_context = " ".join(context)
+        if len(combined_context) > settings.max_context_length:
+            logger.warning(f"Context length ({len(combined_context)}) exceeds maximum ({settings.max_context_length}). Truncating...")
+            return combined_context[:settings.max_context_length]
+        return combined_context
+
     def generate_response(self, 
                          query: str, 
                          context: List[str],
-                         model: str = "claude-3-sonnet-20240229") -> str:
-        """Generate a response using Claude."""
-        system_prompt = "You are a helpful assistant. Use the provided context to answer questions."
+                         model: str = None) -> Dict[str, Any]:
+        """
+        Generate a response using Claude.
         
-        # Format the message for Claude
-        messages = [
-            {
-                "role": "user",
-                "content": f"Context: {' '.join(context)}\n\nQuestion: {query}"
+        Args:
+            query: User query string
+            context: List of context strings
+            model: Optional model override
+            
+        Returns:
+            Dictionary containing response text and metadata
+            
+        Raises:
+            LLMError: If response generation fails
+        """
+        try:
+            # Use configured model if none provided
+            model = model or settings.model_name
+            
+            # Prepare system prompt and context
+            system_prompt = """You are a helpful assistant. Use the provided context to answer questions.
+            If you cannot find relevant information in the context, acknowledge that and provide a general response.
+            Always maintain a professional and informative tone."""
+            
+            formatted_context = self._prepare_context(context)
+            
+            # Format the message for Claude
+            messages = [
+                {
+                    "role": "user",
+                    "content": f"Context: {formatted_context}\n\nQuestion: {query}"
+                }
+            ]
+            
+            logger.debug(f"Sending request to Claude with model: {model}")
+            response = self.client.messages.create(
+                model=model,
+                system=system_prompt,
+                messages=messages,
+                temperature=settings.temperature,
+                max_tokens=settings.max_tokens
+            )
+            
+            # Extract response text and metadata
+            result = {
+                "text": response.content[0].text,
+                "model": model,
+                "finish_reason": response.stop_reason,
+                "usage": {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens
+                }
             }
-        ]
-        
-        response = self.client.messages.create(
-            model=model,
-            system=system_prompt,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=500
-        )
-        
-        return response.content[0].text
+            
+            logger.info(f"Generated response with {result['usage']['output_tokens']} tokens")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to generate response: {str(e)}")
+            raise LLMError(f"Failed to generate response: {str(e)}")
