@@ -40,13 +40,14 @@ class ChromaDB:
             logger.error(f"Error retrieving all documents: {str(e)}", exc_info=True)
             raise
 
-    def add_documents(self, documents: List[str], embeddings: List[List[float]], metadata: List[Dict[str, Any]]):
+    def add_documents(self, documents: List[str], embeddings: List[List[float]], metadata: List[Dict[str, Any]], ids: List[str]):
         """Add documents to the collection."""
         try:
             self.collection.add(
                 documents=documents,
                 embeddings=embeddings,
-                metadatas=metadata
+                metadatas=metadata,
+                ids=ids
             )
         except Exception as e:
             logger.error(f"Error adding documents: {str(e)}", exc_info=True)

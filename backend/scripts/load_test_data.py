@@ -1,6 +1,13 @@
 import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
+
+# Add the parent directory to sys.path
+backend_dir = Path(__file__).parent.parent
+sys.path.append(str(backend_dir))
+
+# Set up environment file path
+import os
+os.environ["ENV_FILE"] = str(backend_dir / ".env")
 
 import chromadb
 from app.services.embeddings import EmbeddingService
@@ -10,12 +17,14 @@ def load_test_documents():
     # Initialize ChromaDB
     client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
     
-    # Create or get collection
+    # Get or create collection
+    collection_name = "documents"
     try:
-        collection = client.create_collection("documents")
-        print("collection", collection)
+        collection = client.get_collection(collection_name)
+        print(f"Using existing collection: {collection_name}")
     except ValueError:
-        collection = client.get_collection("documents")
+        collection = client.create_collection(collection_name)
+        print(f"Created new collection: {collection_name}")
     
     # Test documents
     documents = [
@@ -26,7 +35,7 @@ def load_test_documents():
     ]
     
     # Generate embeddings
-    embedding_service = EmbeddingService()
+    embedding_service = EmbeddingService(model_name=settings.embedding_model)
     embeddings = embedding_service.get_embeddings(documents)
     
     # Add documents to ChromaDB

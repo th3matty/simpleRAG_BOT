@@ -1,3 +1,5 @@
+import datetime
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
@@ -5,7 +7,7 @@ from ..services.llm import LLMService
 from ..services.embeddings import EmbeddingService
 from ..database import db
 from ..config import settings, logger
-from ..exceptions import RAGException
+from ..exceptions import DatabaseError, EmbeddingError, RAGException
 
 router = APIRouter()
 
@@ -28,6 +30,14 @@ class DebugDocument(BaseModel):
 class DebugResponse(BaseModel):
     count: int = Field(..., description="Total number of documents")
     documents: List[DebugDocument] = Field(..., description="List of all documents")
+
+class AddDocumentsRequest(BaseModel):
+    documents: List[str]
+
+class UploadResponse(BaseModel):
+    message: str
+    document_ids: List[str]
+    metadata: Dict[str, Any] = Field(..., description="Response metadata including token usage")
 
 def get_llm_service() -> LLMService:
     """Dependency for LLM service."""
@@ -105,7 +115,7 @@ async def chat(
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-
+    
 @router.get("/debug/documents", response_model=DebugResponse)
 async def get_documents():
     """
@@ -133,3 +143,67 @@ async def get_documents():
     except Exception as e:
         logger.error(f"Error retrieving documents: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve documents")
+
+@router.post("/documents/upload", response_model=UploadResponse)
+async def upload_documents(
+    request: AddDocumentsRequest,
+    embedding_service: EmbeddingService = Depends(get_embedding_service)
+):
+    """
+    Upload documents to the RAG system.
+    
+    Args:
+        request: AddDocumentsRequest containing list of documents
+        embedding_service: Injected embedding service
+        
+    Returns:
+        UploadResponse containing success message and document IDs
+    """
+    try:
+        logger.info(f"Processing upload request with {len(request.documents)} documents")
+        document_ids = []
+        metadata = []
+        
+        # Generate embeddings for all documents at once
+        embeddings = embedding_service.get_embeddings(request.documents)
+
+        # Create metadata and IDs for each document
+        for i in range(len(request.documents)):
+            doc_id = f"doc_{i}_{int(time.time())}"
+            document_ids.append(doc_id)
+            
+            metadata_item = {
+                "id": doc_id,
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "source": "api-upload"
+            }
+            metadata.append(metadata_item)        
+        
+        # Add documents to the database with their IDs
+        db.add_documents(
+            documents=request.documents,
+            embeddings=embeddings,
+            metadata=metadata,
+            ids=document_ids
+        )
+
+        logger.info(f"Successfully uploaded {len(request.documents)} documents")
+        
+        return UploadResponse(
+            message=f"Successfully uploaded {len(request.documents)} documents",
+            document_ids=document_ids,
+            metadata={
+                "document_count": len(request.documents),
+                "timestamp": datetime.datetime.utcnow().isoformat()
+            }
+        )
+    
+    except EmbeddingError as e:
+        logger.error(f"Embedding error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    except DatabaseError as e:
+        logger.error(f"Database error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")

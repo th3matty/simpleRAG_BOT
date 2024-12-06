@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 from pydantic import Field, validator
 import logging
 import sys
+import os
 from pathlib import Path
 from typing import Optional
 from .exceptions import ConfigurationError
@@ -64,7 +65,7 @@ class Settings(BaseSettings):
         return v.upper()
 
     class Config:
-        env_file = ".env"
+        env_file = os.getenv("ENV_FILE", ".env")
         protected_namespaces = ()
 
 settings = Settings()

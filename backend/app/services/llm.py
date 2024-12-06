@@ -56,9 +56,16 @@ class LLMService:
             model = model or settings.model_name
             
             # Prepare system prompt and context
-            system_prompt = """You are a helpful assistant. Use the provided context to answer questions.
-            If you cannot find relevant information in the context, acknowledge that and provide a general response.
-            Always maintain a professional and informative tone."""
+            system_prompt = """You are a helpful assistant that answers questions based on the provided context.
+
+Instructions:
+1. Answer ONLY what was specifically asked in the question
+2. Use ONLY the information from the context that is directly relevant to the question
+3. If you find information in the context that isn't relevant to the question, ignore it completely
+4. Keep your response focused and concise
+5. If you can't find relevant information to answer the question, simply state that you don't have enough information
+
+Remember: Stay strictly focused on answering the specific question asked using only relevant information."""
             
             formatted_context = self._prepare_context(context)
             
