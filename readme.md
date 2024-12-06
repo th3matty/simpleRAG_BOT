@@ -81,6 +81,7 @@ uvicorn app.main:app --reload
 
 - POST `/chat`: Submit a query and get a response with sources
 - GET `/debug/documents`: List all documents in the database
+- POST `/documents/upload: Add documents to the database
 
 ## API Documentation
 
