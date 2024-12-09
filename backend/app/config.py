@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     chroma_persist_directory: str = Field(
         "./chroma_db", description="Directory for ChromaDB persistence"
     )
+    PYTHONPATH: str
 
     # Model Settings
     model_name: str = Field("claude-3-sonnet-20240229", description="LLM model name")
