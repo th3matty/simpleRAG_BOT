@@ -1,19 +1,39 @@
+"""
+Custom exceptions for the application.
+"""
+
+
 class RAGException(Exception):
-    """Base exception for RAG application."""
+    """Base exception for RAG-related errors."""
+
     pass
 
-class DatabaseError(RAGException):
-    """Raised when database operations fail."""
-    pass
-
-class EmbeddingError(RAGException):
-    """Raised when embedding generation fails."""
-    pass
-
-class LLMError(RAGException):
-    """Raised when LLM operations fail."""
-    pass
 
 class ConfigurationError(RAGException):
-    """Raised when configuration is invalid."""
+    """Raised when there's an error in the configuration."""
+
+    pass
+
+
+class DatabaseError(RAGException):
+    """Raised when there's an error with the database operations."""
+
+    pass
+
+
+class EmbeddingError(RAGException):
+    """Raised when there's an error generating embeddings."""
+
+    pass
+
+
+class LLMError(RAGException):
+    """Raised when there's an error with the LLM service."""
+
+    pass
+
+
+class CalculatorError(RAGException):
+    """Raised when there's an error evaluating a mathematical expression."""
+
     pass
