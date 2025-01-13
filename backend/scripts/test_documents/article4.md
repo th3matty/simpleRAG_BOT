@@ -1,0 +1,11 @@
+# Attribut (Programmierung)
+
+Ein Attribut (von lateinisch attribuere ‚zuteilen‘, ‚zuordnen‘), auch Eigenschaft genannt, gilt im Allgemeinen als Merkmal, Kennzeichen, Informationsdetail etc., das einem konkreten Objekt zugeordnet ist. Dabei wird unterschieden zwischen der Bedeutung (z. B. Augenfarbe) und der konkreten Ausprägung (z. B. blau) des Attributs.
+
+In der Informatik wird unter Attribut die Definitionsebene für diese Merkmale verstanden. Als solche werden sie analytisch ermittelt, definiert und beschrieben sowie für einen bestimmten Objekttyp als Elemente seiner Struktur festgelegt („modelliert“). Daten über die Objekte werden in dieser Struktur und nur mit ihrem Inhalt, den Attributwerten, gespeichert. Jedes Objekt repräsentiert sich somit durch die Gesamtheit seiner Attributwerte.
+
+Jedem Attribut sind Regeln zugeordnet, die als Operationen bezeichnet werden. Daraus folgt, dass eine Objektdefinition durch die Definition von Datentypen erweitert werden kann. Ein Darstellungsformat, ein Standardwert sowie gültige Operationen und Einschränkungen (z. B. ist Division durch null nicht erlaubt) können an der Definition von Attributen beteiligt sein oder umgekehrt als Attribut des Objekttyps bezeichnet werden.
+
+In der Computergrafik zum Beispiel können Linienobjekte beispielsweise Attribute wie Anfangspunkt und Endpunkt (mit Koordinaten als Werten), Breite (mit einer Gleitkommazahl als Wert), Farbe (mit beschreibenden Werten wie Rot, Gelb, Grün oder Blau oder in einem bestimmten Farbmodell definierte Werte wie im RGB-Farbraum) usw. aufweisen und Kreisobjekte können zusätzlich mit den Attributen Mittelpunkt und Radius definiert werden.
+
+In Land- bzw. Geoinformationssystemen (GIS) ist die Datengrundlage von Objekten ihre Lage in einem horizontalen Koordinatensystem (meist ebene Gauß-Krüger-Koordinaten oder geografische Breite plus Länge). Alle weiteren Eigenschaften des Objekts (z. B. Höhe, Größe, Zweck, Zeitpunkt der Erfassung) werden den Lagekoordinaten als Attribut zugeordnet. Hingegen wird die Meereshöhe meist in ein zweidimensionales Modell (2½-D) realisiert, also als Objekt mit größerer Bedeutung; bei 3D-Modellen ist sie hingegen den Lagekorrdinaten gleichwertig. Objektattribute sind im Regelfall mit anderen Daten des GIS verknüpfbar, heute meist auch mit anderen, verwandten Datenbanken.
