@@ -38,31 +38,6 @@ class RAGChunker(BaseChunker):
 
 def run_evaluation():
     try:
-        logger.info("Starting evaluation process...")
-
-        logger.info("Initializing ChromaDB client...")
-        client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
-        logger.info(
-            f"ChromaDB client initialized at {settings.chroma_persist_directory}"
-        )
-
-        logger.info("Getting collection...")
-        collection = client.get_collection("documents")
-        logger.info("Collection retrieved successfully")
-
-        logger.info("Retrieving documents from collection...")
-        result = collection.get()
-        documents = result["documents"]
-        logger.info(f"Retrieved {len(documents)} documents")
-
-        for i, doc in enumerate(documents):
-            logger.info(f"Document {i+1} length: {len(doc)} characters")
-            logger.debug(f"Document {i+1} preview: {doc[:100]}...")
-
-        if not documents:
-            logger.error("No documents found in the collection!")
-            return
-
         logger.info("Initializing chunker and evaluation...")
         chunker = RAGChunker()
         evaluation = GeneralEvaluation()
