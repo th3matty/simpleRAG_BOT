@@ -1,0 +1,3 @@
+# biodeutsch
+
+Das Schlagwort biodeutsch (auch bio-deutsch) bezeichnet seit den 1990er Jahren ethnische Deutsche.[1][2][3] Der Begriff wurde zunächst von Menschen mit Migrationshintergrund als scherzhafte Fremdbeschreibung, später auch im Sinne eines Geusenworts als (selbst-)ironische Bezeichnung von und für Menschen ohne Migrationshintergrund verwendet. Seit den 2010er Jahren verwenden auch Teile der Neuen Rechten den Begriff Biodeutsche. Als politischer Kampfbegriff behauptet er dort eine angeblich existierende gemeinsame genetisch-biologische Herkunft aller „echten“ Deutschen.[4][5] Es wurde zum Unwort des Jahres 2024 gewählt.

@@ -2,6 +2,29 @@
 
 A robust RAG system built with FastAPI, ChromaDB, and Anthropic's Claude for intelligent document retrieval and question answering.
 
+## Table of Contents
+
+1. [Features](#features)
+2. [Project Structure](#project-structure)
+3. [Setup](#setup)
+4. [Usage](#usage)
+   - [Running the Server](#running-the-server)
+   - [API Endpoints](#api-endpoints)
+   - [Example Queries](#example-queries)
+5. [Data Management](#data-management)
+   - [Loading Test Data](#loading-test-data)
+   - [Evaluating Chunking](#evaluating-chunking)
+6. [API Documentation](#api-documentation)
+7. [Configuration](#configuration)
+   - [Model Settings](#model-settings)
+   - [Chat Settings](#chat-settings)
+   - [Logging](#logging)
+8. [Error Handling](#error-handling)
+9. [Development](#development)
+   - [Adding New Tools](#adding-new-tools)
+   - [Running Tests](#running-tests)
+10. [License](#license)
+
 ## Features
 
 - **Vector Database**: ChromaDB for efficient similarity search
@@ -84,6 +107,8 @@ Required environment variables:
 
 ## Usage
 
+### Running the Server
+
 1. Start the server:
 
 ```bash
@@ -93,7 +118,7 @@ uvicorn app.main:app --reload
 
 2. The API will be available at `http://localhost:8000`
 
-3. API Endpoints:
+### API Endpoints
 
 - POST `/chat`: Submit a query and get a response with sources
   - Automatically determines whether to use search or calculator
@@ -118,6 +143,45 @@ uvicorn app.main:app --reload
   "query": "What is 25 * 4 + 10?"
 }
 ```
+
+## Data Management
+
+### Loading Test Data
+
+The system includes a script to load test documents into the ChromaDB database. To use it:
+
+1. Place your markdown documents in `backend/scripts/test_documents/`
+2. Run the loading script:
+
+```bash
+cd backend
+python scripts/load_test_data.py
+```
+
+The script will:
+
+- Create or recreate a "documents" collection in ChromaDB
+- Load all markdown files from the test_documents directory
+- Generate embeddings and store them in the database
+- Display information about loaded documents
+
+### Evaluating Chunking
+
+The system includes a script to evaluate document chunking strategies. To run the evaluation:
+
+```bash
+cd backend
+python scripts/evaluate_chunking.py
+```
+
+The script will:
+
+- Load documents from the ChromaDB collection
+- Apply the current chunking strategy (default: 1200 characters)
+- Evaluate chunking performance using metrics:
+  - IOU (Intersection Over Union): How well chunks align with natural boundaries
+  - Recall: How much relevant information is preserved
+- Display detailed evaluation results
 
 ## API Documentation
 
@@ -167,14 +231,6 @@ The tool system is designed to be extensible. To add a new tool:
 1. Create a new service in `app/services/`
 2. Define the tool schema in `app/services/tools.py`
 3. Implement the tool execution in `ToolExecutor`
-
-### Adding New Documents
-
-Use the load_test_data.py script:
-
-```bash
-python backend/scripts/load_test_data.py --input_dir path/to/documents
-```
 
 ### Running Tests
 

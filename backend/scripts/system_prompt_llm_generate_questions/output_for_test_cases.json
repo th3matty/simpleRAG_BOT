@@ -1,0 +1,46 @@
+[
+  {
+    "oath": "I will not use the word 'and' in the question unless it is part of a proper noun. I will also make sure the question is concise.",
+    "question": "What does the term 'biodeutsch' mean, and how has its usage evolved?",
+    "references": [
+      "Das Schlagwort biodeutsch (auch bio-deutsch) bezeichnet seit den 1990er Jahren ethnische Deutsche.",
+      "Der Begriff wurde zunächst von Menschen mit Migrationshintergrund als scherzhafte Fremdbeschreibung, später auch im Sinne eines Geusenworts als (selbst-)ironische Bezeichnung von und für Menschen ohne Migrationshintergrund verwendet.",
+      "Seit den 2010er Jahren verwenden auch Teile der Neuen Rechten den Begriff Biodeutsche.",
+      "Als politischer Kampfbegriff behauptet er dort eine angeblich existierende gemeinsame genetisch-biologische Herkunft aller „echten“ Deutschen.",
+      "Es wurde zum Unwort des Jahres 2024 gewählt."
+    ]
+  },
+  {
+    "oath": "I will not use the word 'and' in the question unless it is part of a proper noun. I will also make sure the question is concise.",
+    "question": "What defines the Urnenfelderkultur and its historical significance?",
+    "references": [
+      "Die Urnenfelderkultur (Kürzel UK) ist die am weitesten verbreitete mitteleuropäische Kultur der späten Bronzezeit.",
+      "Sie bestand etwa von 1300 bis 800 v. Chr. (in der Urnenfelderzeit).",
+      "Da der Bestattungsritus – Leichenverbrennungen auf einem Scheiterhaufen und die Beisetzung des Leichenbrands in Urnen – auch in anderen Kulturen geübt wurde, ist die Urnenfelderkultur durch weitere Kriterien wie typische Bronze- und Keramikformen sowie die zugehörigen Gebiete Europas definiert.",
+      "Die Urnenfelderkultur folgt auf die Hügelgräberkultur der mittleren Bronzezeit.",
+      "In vielen Teilen ihres Verbreitungsgebietes wird die Urnenfelderkultur mit Beginn der Eisenzeit durch die Hallstattkultur abgelöst."
+    ]
+  },
+  {
+    "oath": "I will not use the word 'and' in the question unless it is part of a proper noun. I will also make sure the question is concise.",
+    "question": "What were Giovanni Battista Zupi's contributions to astronomy?",
+    "references": [
+      "Giovanni Battista Zupi oder auch latinisiert Zupus (um 1590 in Catanzaro; † 1650 in Neapel) war ein italienischer Astronom, Mathematiker und Priester des Jesuitenordens.",
+      "Im Jahre 1639 entdeckte Zupi als Erster, dass der Planet Merkur auf seiner Umlaufbahn Phasen zeigt, ähnlich wie es beim Mond und der Venus der Fall ist.",
+      "Seine Beobachtungen bewiesen, dass Merkur die Sonne umkreist.",
+      "Nach ihm ist der Mondkrater Zupus benannt.",
+      "Am 15. Oktober 2021 wurde ein Asteroid nach ihm benannt: (227152) Zupi."
+    ]
+  },
+  {
+    "oath": "I will not use the word 'and' in the question unless it is part of a proper noun. I will also make sure the question is concise.",
+    "question": "What are attributes in programming, and how are they used?",
+    "references": [
+      "Ein Attribut (von lateinisch attribuere ‚zuteilen‘, ‚zuordnen‘), auch Eigenschaft genannt, gilt im Allgemeinen als Merkmal, Kennzeichen, Informationsdetail etc., das einem konkreten Objekt zugeordnet ist.",
+      "In der Informatik wird unter Attribut die Definitionsebene für diese Merkmale verstanden.",
+      "Daten über die Objekte werden in dieser Struktur und nur mit ihrem Inhalt, den Attributwerten, gespeichert.",
+      "Jedem Attribut sind Regeln zugeordnet, die als Operationen bezeichnet werden.",
+      "Ein Darstellungsformat, ein Standardwert sowie gültige Operationen und Einschränkungen können an der Definition von Attributen beteiligt sein oder umgekehrt als Attribut des Objekttyps bezeichnet werden."
+    ]
+  }
+]
