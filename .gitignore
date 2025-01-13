@@ -40,8 +40,12 @@ logs/
 .env.local
 .env.*.local
 
-# Database
+# Database and ChromaDB
 backend/chroma_db/
+**/chroma/
+**/chroma_logs/
+*.parquet
+*.sqlite3
 
 # Distribution / packaging
 .Python
