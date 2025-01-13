@@ -167,7 +167,7 @@ The script will:
 
 ### Evaluating Chunking
 
-The system includes a script to evaluate document chunking strategies. To run the evaluation:
+The system includes different scripts to evaluate chunking strategies. To run the evaluation:
 
 ```bash
 cd backend
@@ -176,8 +176,6 @@ python scripts/evaluate_chunking.py
 
 The script will:
 
-- Load documents from the ChromaDB collection
-- Apply the current chunking strategy (default: 1200 characters)
 - Evaluate chunking performance using metrics:
   - IOU (Intersection Over Union): How well chunks align with natural boundaries
   - Recall: How much relevant information is preserved
