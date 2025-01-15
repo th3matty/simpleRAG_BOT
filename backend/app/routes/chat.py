@@ -99,18 +99,57 @@ async def chat(
         response = llm_service.process_query(
             query=request.query, tool_executor=tool_executor
         )
+        logger.info(f"Response generated: {response}")
+        logger.info(
+            f"Tool used: {response['tool_used'] if 'tool_used' in response else None}"
+        )
 
         # Prepare response
         sources = []
-        if response.get("tool_used") == "search_documents":
+        if response["tool_used"] == "search_documents":
             # If search was used, extract sources from the tool result
             results = response["tool_result"].split("\n\n")
+            logger.info(f"results generated: {results}")
+
             for result in results:
                 if result.startswith("Document (ID: "):
-                    # Parse document content and metadata from the formatted result
-                    doc_id = result[result.find("ID: ") + 4 : result.find(")")]
-                    content = result[result.find("): ") + 3 :]
-                    sources.append(Source(content=content, metadata={"id": doc_id}))
+                    try:
+                        # Extract document ID
+                        doc_id = result[result.find("ID: ") + 4 : result.find(")")]
+
+                        # Extract relevance info
+                        relevance_start = result.find("Relevance: ") + 10
+                        relevance_end = result.find(" (Score:")
+                        relevance_category = result[relevance_start:relevance_end]
+
+                        # Extract score
+                        score_start = result.find("Score: ") + 7
+                        score_end = result.find(")", score_start)
+                        relevance_score = float(result[score_start:score_end])
+
+                        # Extract content (everything after the score parenthesis)
+                        content = result[result.find(")", score_end) + 2 :].strip()
+
+                        logger.debug(
+                            f"Parsed document - ID: {doc_id}, "
+                            f"Relevance: {relevance_category}, "
+                            f"Score: {relevance_score}"
+                        )
+
+                        # Create source with enhanced metadata
+                        sources.append(
+                            Source(
+                                content=content,
+                                metadata={
+                                    "id": doc_id,
+                                    "relevance_category": relevance_category,
+                                    "relevance_score": relevance_score,
+                                },
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"Error parsing document result: {str(e)}")
+                        continue
 
         return ChatResponse(
             response=response["text"],

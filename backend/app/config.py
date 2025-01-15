@@ -23,18 +23,25 @@ class Settings(BaseSettings):
     # Model Settings
     model_name: str = Field("claude-3-sonnet-20240229", description="LLM model name")
     embedding_model: str = Field(
-        "all-MiniLM-L6-v2", description="Sentence-transformers model name"
+        "intfloat/multilingual-e5-large",
+        description="Sentence-transformers model name for better semantic search",
     )
 
     # Chat Settings
     max_context_length: int = Field(
-        2000, description="Maximum length of context to send to LLM"
+        4000, description="Maximum length of context to send to LLM"
     )
     temperature: float = Field(
-        0.7, description="Temperature for LLM responses", ge=0.0, le=1.0
+        0.3, description="Temperature for LLM responses", ge=0.0, le=1.0
     )
-    max_tokens: int = Field(500, description="Maximum tokens in LLM response")
-    top_k_results: int = Field(3, description="Number of similar documents to retrieve")
+    max_tokens: int = Field(1000, description="Maximum tokens in LLM response")
+    top_k_results: int = Field(5, description="Number of similar documents to retrieve")
+    similarity_threshold: float = Field(
+        0.5,
+        description="Minimum similarity score for relevant documents (lower = more permissive)",
+        ge=0.0,
+        le=1.0,
+    )
 
     # Logging Settings
     log_level: str = Field("INFO", description="Logging level")
