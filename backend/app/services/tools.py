@@ -8,6 +8,7 @@ from .calculator import Calculator
 from ..database import db
 from ..services.embeddings import EmbeddingService
 from ..config import logger
+from ..config import settings
 
 TOOLS = [
     {
@@ -70,29 +71,67 @@ class ToolExecutor:
             raise ValueError(f"Unknown tool: {tool_name}")
 
     def _execute_search(self, query: str) -> str:
-        """Execute the search documents tool."""
+        """
+        Execute the search documents tool with enhanced result formatting.
+
+        Args:
+            query: The search query string
+
+        Returns:
+            Formatted string containing search results with relevance scores
+        """
         logger.info(f"Executing search with query: {query}")
 
-        # Generate embedding for the query
-        query_embedding = self.embedding_service.get_single_embedding(query)
+        try:
+            # Generate embedding for the query
+            query_embedding = self.embedding_service.get_single_embedding(query)
 
-        # Search for documents
-        results = db.query_documents(
-            query_embedding=query_embedding,
-            n_results=3,  # You might want to make this configurable
-        )
+            # Search for documents
+            results = db.query_documents(query_embedding=query_embedding)
 
-        if not results["documents"][0]:
-            return "No relevant documents found."
+            # Check if we have any results
+            if not results["documents"] or not results["documents"][0]:
+                logger.info("No documents found matching the query")
+                return "No relevant documents found."
 
-        # Format results as a string
-        formatted_results = []
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            formatted_results.append(
-                f"Document (ID: {meta.get('id', 'unknown')}): {doc}"
+            # Format results as a string with similarity scores
+            formatted_results = []
+            for doc, meta, distance in zip(
+                results["documents"][0],
+                results["metadatas"][0],
+                results["distances"][0],
+            ):
+                # Convert distance to similarity score
+                # ChromaDB uses cosine distance where:
+                # - 0 means identical (cos(0°) = 1)
+                # - 2 means opposite (cos(180°) = -1)
+                # Convert to a 0-1 similarity score where 1 is most similar
+                similarity = (2 - distance) / 2
+
+                # Determine relevance category based on similarity threshold
+                if similarity >= 0.8:
+                    relevance = "High"
+                elif similarity >= 0.6:
+                    relevance = "Moderate"
+                else:
+                    relevance = "Low"
+
+                # Format must match the parsing in chat.py
+                formatted_results.append(
+                    f"Document (ID: {meta.get('id', 'unknown')}) "
+                    f"Relevance: {relevance} (Score: {similarity:.3f}) "
+                    f"{doc}"
+                )
+
+            logger.info(
+                f"Found {len(formatted_results)} documents "
+                f"(Threshold: {settings.similarity_threshold})"
             )
+            return "\n\n".join(formatted_results)
 
-        return "\n\n".join(formatted_results)
+        except Exception as e:
+            logger.error(f"Error searching documents: {str(e)}")
+            return f"Error searching documents: {str(e)}"
 
     def _execute_calculator(self, expression: str) -> str:
         """Execute the calculator tool."""
