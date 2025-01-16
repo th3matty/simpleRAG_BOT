@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         "intfloat/multilingual-e5-large",
         description="Sentence-transformers model name for better semantic search",
     )
-
+    # all-MiniLM-L6-v2
     # Chat Settings
     max_context_length: int = Field(
         4000, description="Maximum length of context to send to LLM"

@@ -21,13 +21,16 @@ def load_test_documents():
     # Initialize ChromaDB
     client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
 
-    # Create or recreate collection
+    # Get or create collection
     collection_name = "documents"
+    collection = client.get_or_create_collection(collection_name)
+
+    # Delete and recreate collection to clear all documents
     try:
         client.delete_collection(collection_name)
         print(f"Deleted existing collection: {collection_name}")
     except:
-        pass
+        print(f"No existing collection to delete")
 
     collection = client.create_collection(collection_name)
     print(f"Created new collection: {collection_name}")
@@ -49,6 +52,7 @@ def load_test_documents():
         return
 
     # Generate embeddings
+    print(f"Using embedding model: {settings.embedding_model}")
     embedding_service = EmbeddingService(model_name=settings.embedding_model)
     embeddings = embedding_service.get_embeddings(documents)
 

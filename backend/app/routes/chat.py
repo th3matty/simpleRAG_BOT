@@ -1,14 +1,18 @@
-import datetime
-import time
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+import datetime
+import time
+import logging
+
 from ..services.llm import LLMService
 from ..services.embeddings import EmbeddingService
-from ..services.tools import ToolExecutor
-from core import db
-from core import settings, logger
-from core import DatabaseError, EmbeddingError, RAGException
+from ..core.tools import ToolExecutor
+from ..core.database import db
+from ..core.config import settings
+from ..core.exceptions import DatabaseError, EmbeddingError, RAGException
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

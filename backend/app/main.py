@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import chat
-from core import settings
+from .core import config
 
 # Create the FastAPI app
 app = FastAPI(title="RAG Chatbot API")
