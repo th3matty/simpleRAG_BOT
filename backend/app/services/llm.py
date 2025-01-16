@@ -1,8 +1,12 @@
+from ..core.exceptions import LLMError
+from ..core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
 from anthropic import Anthropic
 from typing import List, Dict, Any
-from ..exceptions import LLMError
-from ..config import settings, logger
-from .tools import TOOLS, ToolExecutor
+from ..core.tools import TOOLS, ToolExecutor
 
 
 class LLMService:

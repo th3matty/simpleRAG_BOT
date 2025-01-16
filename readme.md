@@ -155,7 +155,7 @@ The system includes a script to load test documents into the ChromaDB database. 
 
 ```bash
 cd backend
-python scripts/load_test_data.py
+python scripts/data_loading/load_test_data.py
 ```
 
 The script will:

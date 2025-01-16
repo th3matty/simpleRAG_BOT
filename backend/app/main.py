@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import chat
-from .config import settings
+from .core import config
 
 # Create the FastAPI app
 app = FastAPI(title="RAG Chatbot API")
@@ -20,4 +20,5 @@ app.include_router(chat.router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
