@@ -1,6 +1,6 @@
 import pytest
 from app.services.calculator import Calculator
-from app.exceptions import CalculatorError
+from app.core.exceptions import CalculatorError
 
 
 def test_basic_addition():
