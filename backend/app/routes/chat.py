@@ -6,9 +6,9 @@ from typing import List, Dict, Any, Optional
 from ..services.llm import LLMService
 from ..services.embeddings import EmbeddingService
 from ..services.tools import ToolExecutor
-from ..database import db
-from ..config import settings, logger
-from ..exceptions import DatabaseError, EmbeddingError, RAGException
+from core import db
+from core import settings, logger
+from core import DatabaseError, EmbeddingError, RAGException
 
 router = APIRouter()
 

@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-backend_dir = Path(__file__).parent.parent
+backend_dir = Path(__file__).parent.parent.parent
 sys.path.append(str(backend_dir))
 
 import os
@@ -9,7 +9,7 @@ import os
 os.environ["ENV_FILE"] = str(backend_dir / ".env")
 
 from chromadb.utils import embedding_functions
-from app.config import settings
+from app.core.config import settings
 from chunking_evaluation import BaseChunker, GeneralEvaluation
 import logging
 import re

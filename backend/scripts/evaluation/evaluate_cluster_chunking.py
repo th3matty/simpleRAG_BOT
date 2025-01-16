@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-backend_dir = Path(__file__).parent.parent
+backend_dir = Path(__file__).parent.parent.parent
 sys.path.append(str(backend_dir))
 
 import os
@@ -9,37 +9,22 @@ import os
 os.environ["ENV_FILE"] = str(backend_dir / ".env")
 
 from chromadb.utils import embedding_functions
-from app.config import settings
+from app.core.config import settings
 from chunking_evaluation import BaseChunker, GeneralEvaluation
+from chunking_evaluation import ClusterSemanticChunker
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class RAGChunker(BaseChunker):
-    def __init__(self, chunk_size=1200):
-        self.chunk_size = chunk_size
-        logger.info(f"Initialized RAGChunker with chunk_size={chunk_size}")
-
-    def split_text(self, text):
-        logger.info(f"Splitting text of length {len(text)}")
-        # Simple fixed-size chunking strategy
-        chunks = [
-            text[i : i + self.chunk_size] for i in range(0, len(text), self.chunk_size)
-        ]
-        logger.info(f"Created {len(chunks)} chunks")
-        return chunks
-
-
 def run_evaluation():
     try:
         logger.info("Starting evaluation process...")
 
-        logger.info("Initializing chunker and evaluation...")
-        chunker = RAGChunker()
+        logger.info("Initializing evaluation...")
         evaluation = GeneralEvaluation()
-        logger.info("Chunker and evaluation initialized")
+        logger.info("Evaluation initialized")
 
         logger.info(
             f"Initializing embedding function with model {settings.embedding_model}..."
@@ -48,6 +33,10 @@ def run_evaluation():
             model_name=settings.embedding_model
         )
         logger.info("Embedding function initialized")
+
+        logger.info("Initializing ClusterSemanticChunker...")
+        chunker = ClusterSemanticChunker(embedding_function, max_chunk_size=400)
+        logger.info("Chunker initialized")
 
         logger.info("Starting evaluation run...")
         try:

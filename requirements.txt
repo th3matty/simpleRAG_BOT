@@ -17,3 +17,6 @@ pydantic-settings>=2.1.0
 # Testing
 pytest>=8.0.0
 httpx>=0.26.0  # For async HTTP client in tests
+
+# Text Chunking
+git+https://github.com/brandonstarxel/chunking_evaluation.git

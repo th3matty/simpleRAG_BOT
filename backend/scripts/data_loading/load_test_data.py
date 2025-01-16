@@ -1,18 +1,20 @@
 import sys
 from pathlib import Path
 
-# Add the parent directory to sys.path
-backend_dir = Path(__file__).parent.parent
-sys.path.append(str(backend_dir))
+# Add both the backend directory and its parent to sys.path
+script_dir = Path(__file__).parent
+backend_dir = script_dir.parent.parent
+project_root = backend_dir.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(backend_dir))
 
-# Set up environment file path
 import os
 
 os.environ["ENV_FILE"] = str(backend_dir / ".env")
 
 import chromadb
 from app.services.embeddings import EmbeddingService
-from app.config import settings
+from app.core.config import settings
 
 
 def load_test_documents():
@@ -31,7 +33,7 @@ def load_test_documents():
     print(f"Created new collection: {collection_name}")
 
     # Read documents from markdown files
-    documents_dir = Path(__file__).parent / "test_documents"
+    documents_dir = Path(backend_dir) / "data" / "test_documents"
     documents = []
     filenames = []
 
