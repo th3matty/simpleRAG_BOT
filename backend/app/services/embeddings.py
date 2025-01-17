@@ -1,7 +1,6 @@
 from sentence_transformers import SentenceTransformer
 from typing import List
 from ..core.exceptions import EmbeddingError
-from ..core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,8 +14,8 @@ class EmbeddingService:
         if cls._instance is None or cls._model_name != model_name:
             cls._instance = super(EmbeddingService, cls).__new__(cls)
             try:
-                logger.info(f"Initializing embedding model: {model_name}")
-                cls._instance.model = SentenceTransformer(model_name)
+                logger.info(f"Initializing embedding model: {model_name} on CPU")
+                cls._instance.model = SentenceTransformer(model_name, device="cpu")
                 cls._model_name = model_name
             except Exception as e:
                 logger.error(f"Failed to initialize embedding model: {str(e)}")

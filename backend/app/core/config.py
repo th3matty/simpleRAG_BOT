@@ -23,10 +23,9 @@ class Settings(BaseSettings):
     # Model Settings
     model_name: str = Field("claude-3-sonnet-20240229", description="LLM model name")
     embedding_model: str = Field(
-        "intfloat/multilingual-e5-large",
+        "all-MiniLM-L6-v2",  # Using smaller model as default for better performance
         description="Sentence-transformers model name for better semantic search",
     )
-    # all-MiniLM-L6-v2
     # Chat Settings
     max_context_length: int = Field(
         4000, description="Maximum length of context to send to LLM"
