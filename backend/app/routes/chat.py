@@ -51,8 +51,23 @@ class DebugResponse(BaseModel):
     documents: List[DebugDocument] = Field(..., description="List of all documents")
 
 
+class DocumentMetadata(BaseModel):
+    title: Optional[str] = Field(None, description="Document title")
+    source: str = Field(default="api-upload", description="Source of the document")
+    tags: List[str] = Field(
+        default_factory=list, description="Tags for categorizing the document"
+    )
+
+
+class Document(BaseModel):
+    content: str = Field(..., description="Document content")
+    metadata: Optional[DocumentMetadata] = None
+
+
 class AddDocumentsRequest(BaseModel):
-    documents: List[str]
+    documents: List[Document] = Field(
+        ..., description="List of documents with their metadata"
+    )
 
 
 class UploadResponse(BaseModel):
@@ -117,6 +132,7 @@ async def chat(
 
             for result in results:
                 if result.startswith("Document (ID: "):
+                    logger.info(f"result with documents id: {result}")
                     try:
                         # Extract document ID
                         doc_id = result[result.find("ID: ") + 4 : result.find(")")]
@@ -224,24 +240,38 @@ async def upload_documents(
         document_ids = []
         metadata = []
 
+        # Extract document contents for embedding
+        document_contents = [doc.content for doc in request.documents]
+
         # Generate embeddings for all documents at once
-        embeddings = embedding_service.get_embeddings(request.documents)
+        embeddings = embedding_service.get_embeddings(document_contents)
 
         # Create metadata and IDs for each document
-        for i in range(len(request.documents)):
-            doc_id = f"doc_{i}_{int(time.time())}"
+        timestamp = datetime.datetime.utcnow().isoformat()
+        current_time = int(time.time())
+
+        for i, doc in enumerate(request.documents):
+            doc_id = f"doc_{current_time}_{i}"
             document_ids.append(doc_id)
 
-            metadata_item = {
-                "id": doc_id,
-                "timestamp": datetime.datetime.utcnow().isoformat(),
-                "source": "api-upload",
+            # Combine default and user-provided metadata
+            doc_metadata = {
+                "id": doc_id,  # Ensure ID is stored in metadata for vector search
+                "timestamp": timestamp,
+                "source": doc.metadata.source if doc.metadata else "api-upload",
             }
-            metadata.append(metadata_item)
+
+            if doc.metadata:
+                if doc.metadata.title:
+                    doc_metadata["title"] = doc.metadata.title
+                if doc.metadata.tags:
+                    doc_metadata["tags"] = doc.metadata.tags
+
+            metadata.append(doc_metadata)
 
         # Add documents to the database with their IDs
         db.add_documents(
-            documents=request.documents,
+            documents=document_contents,
             embeddings=embeddings,
             metadata=metadata,
             ids=document_ids,

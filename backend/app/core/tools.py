@@ -99,10 +99,11 @@ class ToolExecutor:
 
             # Format results as a string with similarity scores
             formatted_results = []
-            for doc, meta, distance in zip(
+            for doc, meta, distance, doc_id in zip(
                 results["documents"][0],
                 results["metadatas"][0],
                 results["distances"][0],
+                results["ids"][0],  # Get IDs directly from query results
             ):
                 # Convert distance to similarity score
                 # ChromaDB uses cosine distance where:
@@ -121,7 +122,7 @@ class ToolExecutor:
 
                 # Format must match the parsing in chat.py
                 formatted_results.append(
-                    f"Document (ID: {meta.get('id', 'unknown')}) "
+                    f"Document (ID: {doc_id}) "
                     f"Relevance: {relevance} (Score: {similarity:.3f}) "
                     f"{doc}"
                 )
