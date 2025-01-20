@@ -20,3 +20,6 @@ httpx>=0.26.0  # For async HTTP client in tests
 
 # Text Chunking
 git+https://github.com/brandonstarxel/chunking_evaluation.git
+
+# Document Processing
+pypdf>=3.0.0
