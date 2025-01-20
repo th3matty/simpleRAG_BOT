@@ -23,3 +23,4 @@ git+https://github.com/brandonstarxel/chunking_evaluation.git
 
 # Document Processing
 pypdf>=3.0.0
+python-docx>=0.8.11
