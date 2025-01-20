@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import datetime
-import time
 import logging
 
 from app.services.chunker import DocumentProcessor
@@ -12,11 +11,9 @@ from ..services.embeddings import EmbeddingService
 from ..core.tools import ToolExecutor
 from ..core.database import db
 from ..core.config import settings
-from ..core.exceptions import DatabaseError, EmbeddingError, RAGException
+from ..core.exceptions import DatabaseError, RAGException
 
 from collections import defaultdict
-from itertools import groupby
-from operator import itemgetter
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +25,14 @@ class ChatRequest(BaseModel):
     query: str = Field(..., description="User query string", min_length=1)
 
 
-class Source(BaseModel):
+class DocumentSource(BaseModel):
     content: str = Field(..., description="Source document content")
     metadata: Dict[str, Any] = Field(..., description="Source document metadata")
 
 
 class ChatResponse(BaseModel):
     response: str = Field(..., description="Generated response from LLM")
-    sources: List[Source] = Field(
+    sources: List[DocumentSource] = Field(
         default=[], description="Source documents used for response"
     )
     metadata: Dict[str, Any] = Field(
@@ -59,12 +56,12 @@ class DocumentMetadata(BaseModel):
     )
 
 
-class Document(BaseModel):
+class DocumentInput(BaseModel):
     content: str = Field(..., description="Document content")
     metadata: Optional[DocumentMetadata] = None
 
 
-class ChunkInfo(BaseModel):
+class DocumentChunk(BaseModel):
     """Represents a single chunk of a document with its metadata"""
 
     content: str = Field(..., description="Chunk content")
@@ -72,27 +69,27 @@ class ChunkInfo(BaseModel):
     metadata: Dict[str, Any] = Field(..., description="Chunk-specific metadata")
 
 
-class DocumentWithChunks(BaseModel):
+class DocumentComplete(BaseModel):
     """Represents a complete document with all its chunks"""
 
     document_id: str = Field(..., description="Unique identifier for the document")
     title: Optional[str] = Field(None, description="Document title")
     source: str = Field(..., description="Document source")
-    chunks: List[ChunkInfo] = Field(..., description="List of document chunks")
+    chunks: List[DocumentChunk] = Field(..., description="List of document chunks")
     metadata: Dict[str, Any] = Field(..., description="Document-level metadata")
 
 
 # Response models
-class GetDocumentsResponse(BaseModel):
+class DocumentListResponse(BaseModel):
     """Response model for document retrieval"""
 
     count: int = Field(..., description="Total number of documents")
-    documents: List[DocumentWithChunks] = Field(
+    documents: List[DocumentComplete] = Field(
         ..., description="List of documents with their chunks"
     )
 
 
-class UploadResponse(BaseModel):
+class DocumentUploadResponse(BaseModel):
     message: str
     document_ids: List[str]
     metadata: Dict[str, Any] = Field(
@@ -101,8 +98,8 @@ class UploadResponse(BaseModel):
 
 
 # Request Model
-class AddDocumentsRequest(BaseModel):
-    documents: List[Document] = Field(
+class DocumentUploadRequest(BaseModel):
+    documents: List[DocumentInput] = Field(
         ..., description="List of documents with their metadata"
     )
 
@@ -187,7 +184,7 @@ async def chat(
 
                         # Create source with enhanced metadata
                         sources.append(
-                            Source(
+                            DocumentSource(
                                 content=content,
                                 metadata={
                                     "id": doc_id,
@@ -221,7 +218,7 @@ async def chat(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/documents", response_model=GetDocumentsResponse)
+@router.get("/documents", response_model=DocumentListResponse)
 async def get_documents():
     """
     Retrieve all documents from the database, organized by their original structure.
@@ -229,7 +226,7 @@ async def get_documents():
     maintaining chunk relationships and metadata.
 
     Returns:
-        GetDocumentsResponse containing organized documents and their chunks
+        DocumentListResponse containing organized documents and their chunks
     """
     try:
         logger.info("Retrieving all documents from database")
@@ -244,7 +241,7 @@ async def get_documents():
 
         if not results or not results["documents"]:
             logger.info("No documents found in database")
-            return GetDocumentsResponse(count=0, documents=[])
+            return DocumentListResponse(count=0, documents=[])
 
         # Group chunks by their parent document ID
         document_chunks = defaultdict(list)
@@ -260,7 +257,7 @@ async def get_documents():
                 continue
 
             # Create chunk info
-            chunk = ChunkInfo(
+            chunk = DocumentChunk(
                 content=doc,
                 chunk_index=meta.get("chunk_index", 0),
                 metadata={
@@ -283,7 +280,7 @@ async def get_documents():
             doc_metadata = first_chunk.metadata.copy()
 
             # Create document with its chunks
-            document = DocumentWithChunks(
+            document = DocumentComplete(
                 document_id=parent_id,
                 title=doc_metadata.get("title"),
                 source=doc_metadata.get("source", "unknown"),
@@ -299,16 +296,16 @@ async def get_documents():
 
         logger.info(f"Retrieved {len(documents)} documents with their chunks")
 
-        return GetDocumentsResponse(count=len(documents), documents=documents)
+        return DocumentListResponse(count=len(documents), documents=documents)
 
     except Exception as e:
         logger.error(f"Error retrieving documents: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve documents")
 
 
-@router.post("/documents/upload", response_model=UploadResponse)
+@router.post("/documents/upload", response_model=DocumentUploadResponse)
 async def upload_documents(
-    request: AddDocumentsRequest,
+    request: DocumentUploadRequest,
     embedding_service: EmbeddingService = Depends(get_embedding_service),
 ):
     """
@@ -316,91 +313,92 @@ async def upload_documents(
     Each document is split into meaningful chunks while preserving context and structure.
 
     Args:
-        request: AddDocumentsRequest containing list of documents
+        request: DocumentUploadRequest containing list of documents
         embedding_service: Injected embedding service
 
     Returns:
-        UploadResponse containing success message and document IDs
+        DocumentUploadResponse containing success message and document IDs
     """
+
     try:
-        logger.info(
-            f"Processing upload request with {len(request.documents)} documents"
-        )
-
-        # Initialize our document processor
         document_processor = DocumentProcessor(embedding_service=embedding_service)
-
-        all_chunks = []
-        parent_doc_ids = []
-
-        # Process each document
-        for doc in request.documents:
-            try:
-                # Prepare metadata with defaults if none provided
-                metadata = {
-                    "source": "api-upload",
-                    "timestamp": datetime.datetime.utcnow().isoformat(),
-                }
-
-                if doc.metadata:
-                    metadata.update(
-                        {
-                            "source": doc.metadata.source,
-                            "tags": doc.metadata.tags,
-                        }
-                    )
-                    if doc.metadata.title:
-                        metadata["title"] = doc.metadata.title
-
-                # Process document into chunks
-                processed_chunks = document_processor.process_document(
-                    content=doc.content, metadata=metadata
-                )
-
-                if processed_chunks:
-                    all_chunks.extend(processed_chunks)
-                    parent_doc_ids.append(processed_chunks[0].metadata["parent_id"])
-                    logger.info(
-                        f"Document processed into {len(processed_chunks)} chunks"
-                    )
-
-            except Exception as doc_error:
-                logger.error(f"Error processing document: {str(doc_error)}")
-                continue
-
-        # Add all chunks to the database
-        if all_chunks:
-            try:
-                db.add_documents(
-                    documents=[chunk.content for chunk in all_chunks],
-                    embeddings=[chunk.embedding for chunk in all_chunks],
-                    metadata=[chunk.metadata for chunk in all_chunks],
-                    ids=[
-                        f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
-                        for chunk in all_chunks
-                    ],
-                )
-
-                logger.info(
-                    f"Successfully uploaded {len(all_chunks)} chunks from {len(parent_doc_ids)} documents"
-                )
-
-                return UploadResponse(
-                    message=f"Successfully processed {len(request.documents)} documents into {len(all_chunks)} chunks",
-                    document_ids=parent_doc_ids,
-                    metadata={
-                        "document_count": len(request.documents),
-                        "chunk_count": len(all_chunks),
-                        "timestamp": datetime.datetime.utcnow().isoformat(),
-                    },
-                )
-
-            except Exception as db_error:
-                logger.error(f"Database error: {str(db_error)}")
-                raise DatabaseError(f"Failed to store documents: {str(db_error)}")
-        else:
-            raise RAGException("No chunks were successfully processed")
+        return await process_documents_upload(request, document_processor)
 
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+async def process_documents_upload(
+    request, document_processor
+) -> DocumentUploadResponse:
+    all_chunks = []
+    parent_doc_ids = []
+
+    # Process each document
+    for doc in request.documents:
+        try:
+            # Prepare metadata with defaults if none provided
+            metadata = {
+                "source": "api-upload",
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+            }
+
+            if doc.metadata:
+                metadata.update(
+                    {
+                        "source": doc.metadata.source,
+                        "tags": (
+                            ",".join(doc.metadata.tags) if doc.metadata.tags else ""
+                        ),
+                    }
+                )
+                if doc.metadata.title:
+                    metadata["title"] = doc.metadata.title
+
+            # Process document into chunks
+            processed_chunks = document_processor.process_document(
+                content=doc.content, metadata=metadata
+            )
+
+            if processed_chunks:
+                all_chunks.extend(processed_chunks)
+                parent_doc_ids.append(processed_chunks[0].metadata["parent_id"])
+                logger.info(f"Document processed into {len(processed_chunks)} chunks")
+
+        except Exception as doc_error:
+            logger.error(f"Error processing document: {str(doc_error)}")
+            continue
+
+    # Add all chunks to the database
+    if all_chunks:
+        try:
+            db.add_documents(
+                documents=[chunk.content for chunk in all_chunks],
+                embeddings=[chunk.embedding for chunk in all_chunks],
+                metadata=[chunk.metadata for chunk in all_chunks],
+                ids=[
+                    f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
+                    for chunk in all_chunks
+                ],
+            )
+
+            logger.info(
+                f"Successfully uploaded {len(all_chunks)} chunks from {len(parent_doc_ids)} documents"
+            )
+
+            return DocumentUploadResponse(
+                message=f"Successfully processed {len(request.documents)} documents into {len(all_chunks)} chunks",
+                document_ids=parent_doc_ids,
+                metadata={
+                    "document_count": len(request.documents),
+                    "chunk_count": len(all_chunks),
+                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                },
+            )
+
+        except Exception as db_error:
+            logger.error(f"Database error: {str(db_error)}")
+            raise DatabaseError(f"Failed to store documents: {str(db_error)}")
+    else:
+        raise RAGException("No chunks were successfully processed")
