@@ -40,6 +40,9 @@ logs/
 .env.local
 .env.*.local
 
+# Test data
+backend/data/test_documents/test_formats/
+
 # Database and ChromaDB
 backend/chroma_db/
 **/chroma/
