@@ -5,6 +5,8 @@ import datetime
 import time
 import logging
 
+from app.services.chunker import DocumentProcessor
+
 from ..services.llm import LLMService
 from ..services.embeddings import EmbeddingService
 from ..core.tools import ToolExecutor
@@ -12,11 +14,16 @@ from ..core.database import db
 from ..core.config import settings
 from ..core.exceptions import DatabaseError, EmbeddingError, RAGException
 
+from collections import defaultdict
+from itertools import groupby
+from operator import itemgetter
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
+# Chat-related models
 class ChatRequest(BaseModel):
     query: str = Field(..., description="User query string", min_length=1)
 
@@ -41,14 +48,7 @@ class ChatResponse(BaseModel):
     tool_result: Optional[str] = Field(None, description="Result returned by the tool")
 
 
-class DebugDocument(BaseModel):
-    content: str = Field(..., description="Document content")
-    metadata: Dict[str, Any] = Field(..., description="Document metadata")
-
-
-class DebugResponse(BaseModel):
-    count: int = Field(..., description="Total number of documents")
-    documents: List[DebugDocument] = Field(..., description="List of all documents")
+# Document-related models
 
 
 class DocumentMetadata(BaseModel):
@@ -64,9 +64,31 @@ class Document(BaseModel):
     metadata: Optional[DocumentMetadata] = None
 
 
-class AddDocumentsRequest(BaseModel):
-    documents: List[Document] = Field(
-        ..., description="List of documents with their metadata"
+class ChunkInfo(BaseModel):
+    """Represents a single chunk of a document with its metadata"""
+
+    content: str = Field(..., description="Chunk content")
+    chunk_index: int = Field(..., description="Position of chunk in original document")
+    metadata: Dict[str, Any] = Field(..., description="Chunk-specific metadata")
+
+
+class DocumentWithChunks(BaseModel):
+    """Represents a complete document with all its chunks"""
+
+    document_id: str = Field(..., description="Unique identifier for the document")
+    title: Optional[str] = Field(None, description="Document title")
+    source: str = Field(..., description="Document source")
+    chunks: List[ChunkInfo] = Field(..., description="List of document chunks")
+    metadata: Dict[str, Any] = Field(..., description="Document-level metadata")
+
+
+# Response models
+class GetDocumentsResponse(BaseModel):
+    """Response model for document retrieval"""
+
+    count: int = Field(..., description="Total number of documents")
+    documents: List[DocumentWithChunks] = Field(
+        ..., description="List of documents with their chunks"
     )
 
 
@@ -75,6 +97,13 @@ class UploadResponse(BaseModel):
     document_ids: List[str]
     metadata: Dict[str, Any] = Field(
         ..., description="Response metadata including token usage"
+    )
+
+
+# Request Model
+class AddDocumentsRequest(BaseModel):
+    documents: List[Document] = Field(
+        ..., description="List of documents with their metadata"
     )
 
 
@@ -192,26 +221,85 @@ async def chat(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/debug/documents", response_model=DebugResponse)
+@router.get("/documents", response_model=GetDocumentsResponse)
 async def get_documents():
     """
-    Debug endpoint to inspect all documents in the database.
+    Retrieve all documents from the database, organized by their original structure.
+    This endpoint reassembles chunked documents into their complete form while
+    maintaining chunk relationships and metadata.
 
     Returns:
-        DebugResponse containing all documents and their count
-
-    Raises:
-        HTTPException: If database query fails
+        GetDocumentsResponse containing organized documents and their chunks
     """
     try:
+        logger.info("Retrieving all documents from database")
+
+        # Add debug logging
+        logger.debug(f"Using ChromaDB directory: {settings.chroma_persist_directory}")
+
+        # Get all documents from the database
         results = db.get_all_documents()
+        # Add debug logging for results
+        logger.debug(f"Raw database results: {results}")
 
-        documents = [
-            DebugDocument(content=doc, metadata=meta)
-            for doc, meta in zip(results["documents"], results["metadatas"])
-        ]
+        if not results or not results["documents"]:
+            logger.info("No documents found in database")
+            return GetDocumentsResponse(count=0, documents=[])
 
-        return DebugResponse(count=len(documents), documents=documents)
+        # Group chunks by their parent document ID
+        document_chunks = defaultdict(list)
+
+        # Process each chunk and organize by parent document
+        for doc, meta, doc_id in zip(
+            results["documents"], results["metadatas"], results["ids"]
+        ):
+            # Extract parent_id from metadata
+            parent_id = meta.get("parent_id")
+            if not parent_id:
+                logger.warning(f"Chunk {doc_id} has no parent_id, skipping")
+                continue
+
+            # Create chunk info
+            chunk = ChunkInfo(
+                content=doc,
+                chunk_index=meta.get("chunk_index", 0),
+                metadata={
+                    k: v
+                    for k, v in meta.items()
+                    if k not in ["parent_id", "chunk_index"]
+                },
+            )
+
+            document_chunks[parent_id].append(chunk)
+
+        # Organize chunks into complete documents
+        documents = []
+        for parent_id, chunks in document_chunks.items():
+            # Sort chunks by their index
+            sorted_chunks = sorted(chunks, key=lambda x: x.chunk_index)
+
+            # Get document-level metadata from first chunk
+            first_chunk = sorted_chunks[0]
+            doc_metadata = first_chunk.metadata.copy()
+
+            # Create document with its chunks
+            document = DocumentWithChunks(
+                document_id=parent_id,
+                title=doc_metadata.get("title"),
+                source=doc_metadata.get("source", "unknown"),
+                chunks=sorted_chunks,
+                metadata={
+                    "timestamp": doc_metadata.get("timestamp"),
+                    "tags": doc_metadata.get("tags", []),
+                    "total_chunks": len(sorted_chunks),
+                    "file_type": doc_metadata.get("file_type"),
+                },
+            )
+            documents.append(document)
+
+        logger.info(f"Retrieved {len(documents)} documents with their chunks")
+
+        return GetDocumentsResponse(count=len(documents), documents=documents)
 
     except Exception as e:
         logger.error(f"Error retrieving documents: {str(e)}", exc_info=True)
@@ -224,7 +312,8 @@ async def upload_documents(
     embedding_service: EmbeddingService = Depends(get_embedding_service),
 ):
     """
-    Upload documents to the RAG system.
+    Upload and process documents using our semantic chunking system.
+    Each document is split into meaningful chunks while preserving context and structure.
 
     Args:
         request: AddDocumentsRequest containing list of documents
@@ -237,63 +326,81 @@ async def upload_documents(
         logger.info(
             f"Processing upload request with {len(request.documents)} documents"
         )
-        document_ids = []
-        metadata = []
 
-        # Extract document contents for embedding
-        document_contents = [doc.content for doc in request.documents]
+        # Initialize our document processor
+        document_processor = DocumentProcessor(embedding_service=embedding_service)
 
-        # Generate embeddings for all documents at once
-        embeddings = embedding_service.get_embeddings(document_contents)
+        all_chunks = []
+        parent_doc_ids = []
 
-        # Create metadata and IDs for each document
-        timestamp = datetime.datetime.utcnow().isoformat()
-        current_time = int(time.time())
+        # Process each document
+        for doc in request.documents:
+            try:
+                # Prepare metadata with defaults if none provided
+                metadata = {
+                    "source": "api-upload",
+                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                }
 
-        for i, doc in enumerate(request.documents):
-            doc_id = f"doc_{current_time}_{i}"
-            document_ids.append(doc_id)
+                if doc.metadata:
+                    metadata.update(
+                        {
+                            "source": doc.metadata.source,
+                            "tags": doc.metadata.tags,
+                        }
+                    )
+                    if doc.metadata.title:
+                        metadata["title"] = doc.metadata.title
 
-            # Combine default and user-provided metadata
-            doc_metadata = {
-                "id": doc_id,  # Ensure ID is stored in metadata for vector search
-                "timestamp": timestamp,
-                "source": doc.metadata.source if doc.metadata else "api-upload",
-            }
+                # Process document into chunks
+                processed_chunks = document_processor.process_document(
+                    content=doc.content, metadata=metadata
+                )
 
-            if doc.metadata:
-                if doc.metadata.title:
-                    doc_metadata["title"] = doc.metadata.title
-                if doc.metadata.tags:
-                    doc_metadata["tags"] = doc.metadata.tags
+                if processed_chunks:
+                    all_chunks.extend(processed_chunks)
+                    parent_doc_ids.append(processed_chunks[0].metadata["parent_id"])
+                    logger.info(
+                        f"Document processed into {len(processed_chunks)} chunks"
+                    )
 
-            metadata.append(doc_metadata)
+            except Exception as doc_error:
+                logger.error(f"Error processing document: {str(doc_error)}")
+                continue
 
-        # Add documents to the database with their IDs
-        db.add_documents(
-            documents=document_contents,
-            embeddings=embeddings,
-            metadata=metadata,
-            ids=document_ids,
-        )
+        # Add all chunks to the database
+        if all_chunks:
+            try:
+                db.add_documents(
+                    documents=[chunk.content for chunk in all_chunks],
+                    embeddings=[chunk.embedding for chunk in all_chunks],
+                    metadata=[chunk.metadata for chunk in all_chunks],
+                    ids=[
+                        f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
+                        for chunk in all_chunks
+                    ],
+                )
 
-        logger.info(f"Successfully uploaded {len(request.documents)} documents")
+                logger.info(
+                    f"Successfully uploaded {len(all_chunks)} chunks from {len(parent_doc_ids)} documents"
+                )
 
-        return UploadResponse(
-            message=f"Successfully uploaded {len(request.documents)} documents",
-            document_ids=document_ids,
-            metadata={
-                "document_count": len(request.documents),
-                "timestamp": datetime.datetime.utcnow().isoformat(),
-            },
-        )
+                return UploadResponse(
+                    message=f"Successfully processed {len(request.documents)} documents into {len(all_chunks)} chunks",
+                    document_ids=parent_doc_ids,
+                    metadata={
+                        "document_count": len(request.documents),
+                        "chunk_count": len(all_chunks),
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                    },
+                )
 
-    except EmbeddingError as e:
-        logger.error(f"Embedding error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-    except DatabaseError as e:
-        logger.error(f"Database error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+            except Exception as db_error:
+                logger.error(f"Database error: {str(db_error)}")
+                raise DatabaseError(f"Failed to store documents: {str(db_error)}")
+        else:
+            raise RAGException("No chunks were successfully processed")
+
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")

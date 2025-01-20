@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+import logging
+import os
 
 # Add both the backend directory and its parent to sys.path
 script_dir = Path(__file__).parent
@@ -8,65 +10,94 @@ project_root = backend_dir.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(backend_dir))
 
-import os
 
 os.environ["ENV_FILE"] = str(backend_dir / ".env")
+
+# Configure logging to show all details
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],  # Print to console
+)
 
 import chromadb
 from app.services.embeddings import EmbeddingService
 from app.core.config import settings
+from app.services.chunker import DocumentProcessor
+
+logger = logging.getLogger(__name__)
 
 
 def load_test_documents():
-    # Initialize ChromaDB
     client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
+    embedding_service = EmbeddingService(model_name=settings.embedding_model)
+    document_processor = DocumentProcessor(embedding_service=embedding_service)
 
     # Get or create collection
     collection_name = "documents"
-    collection = client.get_or_create_collection(collection_name)
 
     # Delete and recreate collection to clear all documents
     try:
         client.delete_collection(collection_name)
-        print(f"Deleted existing collection: {collection_name}")
+        logger.info(f"Deleted existing collection: {collection_name}")
     except:
-        print(f"No existing collection to delete")
+        logger.info(f"No existing collection to delete")
 
     collection = client.create_collection(collection_name)
-    print(f"Created new collection: {collection_name}")
+    logger.info(f"Created new collection: {collection_name}")
 
-    # Read documents from markdown files
+    # Process documents
     documents_dir = Path(backend_dir) / "data" / "test_documents"
-    documents = []
-    filenames = []
+    all_chunks = []
 
-    # Read all markdown files
+    # Read and process each markdown file
     for file_path in sorted(documents_dir.glob("*.md")):
-        with open(file_path, "r", encoding="utf-8") as file:
-            content = file.read()
-            documents.append(content)
-            filenames.append(file_path.name)
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                content = file.read()
 
-    if not documents:
-        print("No markdown files found in test_documents directory!")
-        return
+                # Process document with metadata
+                metadata = {
+                    "source": file_path.name,
+                    "file_type": "markdown",
+                    "original_filename": file_path.name,
+                }
 
-    # Generate embeddings
-    print(f"Using embedding model: {settings.embedding_model}")
-    embedding_service = EmbeddingService(model_name=settings.embedding_model)
-    embeddings = embedding_service.get_embeddings(documents)
+                processed_chunks = document_processor.process_document(
+                    content=content, metadata=metadata
+                )
 
-    # Add documents to ChromaDB
-    collection.add(
-        embeddings=embeddings,
-        documents=documents,
-        metadatas=[{"source": filename} for filename in filenames],
-        ids=[f"doc_{i}" for i in range(len(documents))],
-    )
+                all_chunks.extend(processed_chunks)
+                logger.info(
+                    f"Processed {file_path.name} into {len(processed_chunks)} chunks"
+                )
 
-    print(f"Loaded {len(documents)} documents successfully!")
-    for filename in filenames:
-        print(f"- {filename}")
+        except Exception as e:
+            logger.error(f"Error processing {file_path.name}: {str(e)}")
+            continue
+
+    # Add all chunks to ChromaDB
+    if all_chunks:
+        try:
+            collection.add(
+                embeddings=[
+                    chunk.embedding
+                    for chunk in all_chunks
+                    if chunk.embedding is not None
+                ],
+                documents=[chunk.content for chunk in all_chunks],
+                metadatas=[chunk.metadata for chunk in all_chunks],
+                ids=[
+                    f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
+                    for chunk in all_chunks
+                ],
+            )
+            logger.info(f"Successfully loaded {len(all_chunks)} chunks into ChromaDB")
+        except Exception as e:
+            logger.error(f"Error adding chunks to ChromaDB: {str(e)}")
+            raise
+    else:
+        logger.warning("No chunks were processed successfully")
 
 
 if __name__ == "__main__":
