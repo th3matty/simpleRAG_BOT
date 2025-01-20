@@ -44,6 +44,7 @@ logs/
 backend/data/test_documents/test_formats/
 
 # Database and ChromaDB
+chroma_db/
 backend/chroma_db/
 **/chroma/
 **/chroma_logs/

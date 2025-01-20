@@ -165,6 +165,33 @@ The script will:
 - Generate embeddings and store them in the database
 - Display information about loaded documents
 
+#### Testing Document Processors
+
+The system includes processor tests for various document formats (PDF, CSV, and DOCX). These tests verify the processors' ability to extract content and metadata from different file types:
+
+1. Place test files in `backend/data/test_documents/test_formats/`:
+
+   - PDF files (\*.pdf)
+   - CSV files (\*.csv)
+   - DOCX files (\*.docx)
+
+2. Run the processor tests:
+
+```bash
+cd backend
+python -m pytest tests/test_pdf_processor.py
+python -m pytest tests/test_csv_processor.py
+python -m pytest tests/test_docx_processor.py
+```
+
+Each processor test validates:
+
+- Text extraction from the document
+- Metadata extraction capabilities
+- Error handling for invalid files
+
+Note: These tests only verify the processors' extraction capabilities. They do not load documents into the vector database. For loading documents into the database, use the data loading scripts in the `scripts/data_loading/` directory.
+
 ### Evaluating Chunking
 
 The system includes different scripts to evaluate chunking strategies. To run the evaluation:
