@@ -165,17 +165,17 @@ The script will:
 - Generate embeddings and store them in the database
 - Display information about loaded documents
 
-#### Testing Different Document Formats
+#### Testing Document Processors
 
-The system supports processing various document formats including PDF, CSV, and DOCX files. To test these formats:
+The system includes processor tests for various document formats (PDF, CSV, and DOCX). These tests verify the processors' ability to extract content and metadata from different file types:
 
-1. Place your test files in `backend/data/test_documents/test_formats/`:
+1. Place test files in `backend/data/test_documents/test_formats/`:
 
    - PDF files (\*.pdf)
    - CSV files (\*.csv)
    - DOCX files (\*.docx)
 
-2. Run the document processor tests:
+2. Run the processor tests:
 
 ```bash
 cd backend
@@ -184,14 +184,13 @@ python -m pytest tests/test_csv_processor.py
 python -m pytest tests/test_docx_processor.py
 ```
 
-Each processor test will:
+Each processor test validates:
 
-- Load and process files from the test_formats directory
-- Validate the extraction and processing of document content
-- Ensure proper handling of document metadata
-- Test error cases and edge conditions
+- Text extraction from the document
+- Metadata extraction capabilities
+- Error handling for invalid files
 
-This allows developers to verify the functionality of different document processors and ensure proper integration with the RAG system.
+Note: These tests only verify the processors' extraction capabilities. They do not load documents into the vector database. For loading documents into the database, use the data loading scripts in the `scripts/data_loading/` directory.
 
 ### Evaluating Chunking
 
