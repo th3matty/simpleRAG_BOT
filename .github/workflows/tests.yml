@@ -21,7 +21,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Prepare test directories
+        run: |
+          cd backend
+          mkdir -p data/test_documents/test_formats
+
       - name: Run tests
         run: |
           cd backend
-          PYTHONPATH=$PYTHONPATH:$(pwd) pytest tests/
+          PYTHONPATH=$PYTHONPATH:$(pwd) pytest tests/ -v
