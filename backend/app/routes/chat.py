@@ -1,10 +1,16 @@
-from fastapi import APIRouter, HTTPException, Depends
+import json
+import os
+from pathlib import Path
+from fastapi import APIRouter, Form, HTTPException, Depends, UploadFile, File
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import datetime
 import logging
 
-from app.services.chunker import DocumentProcessor
+from ..services.chunker import DocumentProcessor
+from ..services.document_processor.factory import DocumentProcessorFactory
+from ..services.file_handler import FileHandler
 
 from ..services.llm import LLMService
 from ..services.embeddings import EmbeddingService
@@ -102,6 +108,16 @@ class DocumentUploadRequest(BaseModel):
     documents: List[DocumentInput] = Field(
         ..., description="List of documents with their metadata"
     )
+
+
+class FileUploadMetadata(BaseModel):
+    title: Optional[str] = None
+    source: str = Field(default="api-upload")
+    tags: List[str] = Field(default_factory=list)
+
+
+class FileUploadRequest(BaseModel):
+    metadata: Optional[FileUploadMetadata] = None
 
 
 def get_llm_service() -> LLMService:
@@ -303,102 +319,232 @@ async def get_documents():
         raise HTTPException(status_code=500, detail="Failed to retrieve documents")
 
 
-@router.post("/documents/upload", response_model=DocumentUploadResponse)
-async def upload_documents(
-    request: DocumentUploadRequest,
+# TODO: remove and refactor upload/file endpoint
+# @router.post("/documents/upload", response_model=DocumentUploadResponse)
+# async def upload_documents(
+#     request: DocumentUploadRequest,
+#     embedding_service: EmbeddingService = Depends(get_embedding_service),
+# ):
+#     """
+#     Upload and process documents using our semantic chunking system.
+#     Each document is split into meaningful chunks while preserving context and structure.
+
+#     Args:
+#         request: DocumentUploadRequest containing list of documents
+#         embedding_service: Injected embedding service
+
+#     Returns:
+#         DocumentUploadResponse containing success message and document IDs
+#     """
+
+#     try:
+#         document_processor = DocumentProcessor(embedding_service=embedding_service)
+#         return await process_documents_upload(request, document_processor)
+
+#     except Exception as e:
+#         logger.error(f"Unexpected error: {str(e)}")
+#         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# async def process_documents_upload(
+#     request, document_processor
+# ) -> DocumentUploadResponse:
+#     all_chunks = []
+#     parent_doc_ids = []
+
+#     # Process each document
+#     for doc in request.documents:
+#         try:
+#             # Prepare metadata with defaults if none provided
+#             metadata = {
+#                 "source": "api-upload",
+#                 "timestamp": datetime.datetime.utcnow().isoformat(),
+#             }
+
+#             if doc.metadata:
+#                 metadata.update(
+#                     {
+#                         "source": doc.metadata.source,
+#                         "tags": (
+#                             ",".join(doc.metadata.tags) if doc.metadata.tags else ""
+#                         ),
+#                     }
+#                 )
+#                 if doc.metadata.title:
+#                     metadata["title"] = doc.metadata.title
+
+#             # Process document into chunks
+#             processed_chunks = document_processor.process_document(
+#                 content=doc.content, metadata=metadata
+#             )
+
+#             if processed_chunks:
+#                 all_chunks.extend(processed_chunks)
+#                 parent_doc_ids.append(processed_chunks[0].metadata["parent_id"])
+#                 logger.info(f"Document processed into {len(processed_chunks)} chunks")
+
+#         except Exception as doc_error:
+#             logger.error(f"Error processing document: {str(doc_error)}")
+#             continue
+
+#     # Add all chunks to the database
+#     if all_chunks:
+#         try:
+#             db.add_documents(
+#                 documents=[chunk.content for chunk in all_chunks],
+#                 embeddings=[chunk.embedding for chunk in all_chunks],
+#                 metadata=[chunk.metadata for chunk in all_chunks],
+#                 ids=[
+#                     f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
+#                     for chunk in all_chunks
+#                 ],
+#             )
+
+#             logger.info(
+#                 f"Successfully uploaded {len(all_chunks)} chunks from {len(parent_doc_ids)} documents"
+#             )
+
+#             return DocumentUploadResponse(
+#                 message=f"Successfully processed {len(request.documents)} documents into {len(all_chunks)} chunks",
+#                 document_ids=parent_doc_ids,
+#                 metadata={
+#                     "document_count": len(request.documents),
+#                     "chunk_count": len(all_chunks),
+#                     "timestamp": datetime.datetime.utcnow().isoformat(),
+#                 },
+#             )
+
+#         except Exception as db_error:
+#             logger.error(f"Database error: {str(db_error)}")
+#             raise DatabaseError(f"Failed to store documents: {str(db_error)}")
+#     else:
+#         raise RAGException("No chunks were successfully processed")
+
+
+# In chat.py, add this new endpoint
+
+
+@router.post("/documents/upload/file", response_model=DocumentUploadResponse)
+async def upload_file_document(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    source: Optional[str] = Form("file-upload"),
+    tags: Optional[str] = Form(None),
     embedding_service: EmbeddingService = Depends(get_embedding_service),
 ):
-    """
-    Upload and process documents using our semantic chunking system.
-    Each document is split into meaningful chunks while preserving context and structure.
-
-    Args:
-        request: DocumentUploadRequest containing list of documents
-        embedding_service: Injected embedding service
-
-    Returns:
-        DocumentUploadResponse containing success message and document IDs
-    """
-
     try:
-        document_processor = DocumentProcessor(embedding_service=embedding_service)
-        return await process_documents_upload(request, document_processor)
+        logger.info("Starting file upload process")
+        logger.info(f"Received file: {file.filename}")
 
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Validate file
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No filename provided")
 
+        file_ext = Path(file.filename).suffix.lower()
+        logger.info(f"Extracted file extension: '{file_ext}'")
 
-async def process_documents_upload(
-    request, document_processor
-) -> DocumentUploadResponse:
-    all_chunks = []
-    parent_doc_ids = []
-
-    # Process each document
-    for doc in request.documents:
-        try:
-            # Prepare metadata with defaults if none provided
-            metadata = {
-                "source": "api-upload",
-                "timestamp": datetime.datetime.utcnow().isoformat(),
-            }
-
-            if doc.metadata:
-                metadata.update(
-                    {
-                        "source": doc.metadata.source,
-                        "tags": (
-                            ",".join(doc.metadata.tags) if doc.metadata.tags else ""
-                        ),
-                    }
-                )
-                if doc.metadata.title:
-                    metadata["title"] = doc.metadata.title
-
-            # Process document into chunks
-            processed_chunks = document_processor.process_document(
-                content=doc.content, metadata=metadata
+        if not file_ext:
+            logger.error("No file extension found")
+            raise HTTPException(
+                status_code=400,
+                detail="File must have a valid extension (.pdf, .docx, or .csv)",
             )
 
-            if processed_chunks:
-                all_chunks.extend(processed_chunks)
-                parent_doc_ids.append(processed_chunks[0].metadata["parent_id"])
-                logger.info(f"Document processed into {len(processed_chunks)} chunks")
+        # Initialize processors
+        logger.info("Initializing processors")
+        document_processor = DocumentProcessor(embedding_service=embedding_service)
+        file_handler = FileHandler()
 
-        except Exception as doc_error:
-            logger.error(f"Error processing document: {str(doc_error)}")
-            continue
-
-    # Add all chunks to the database
-    if all_chunks:
+        # Get the appropriate processor
         try:
+            logger.info(f"Getting processor for extension: {file_ext}")
+            processor = DocumentProcessorFactory.get_processor(file_ext)
+            logger.info(f"Successfully got processor for {file_ext}")
+        except ValueError as e:
+            logger.error(f"Failed to get processor: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {file_ext}. Supported formats: ['.pdf', '.docx', '.csv']",
+            )
+
+        # Save file temporarily
+        logger.info("Saving file temporarily")
+        temp_file_path = await file_handler.save_upload_file_temporarily(file)
+        logger.info(f"File saved temporarily at: {temp_file_path}")
+
+        try:
+            # Extract content and metadata
+            content = processor.extract_text(temp_file_path)
+            doc_metadata = processor.extract_metadata(temp_file_path)
+
+            # Prepare metadata combining all sources
+            metadata_dict = {
+                "source": source,
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "original_filename": file.filename,
+                "file_type": file_ext.replace(".", ""),
+            }
+
+            # Add optional metadata
+            if title:
+                metadata_dict["title"] = title
+            if tags:
+                metadata_dict["tags"] = ",".join(tags.split(","))
+
+            # Update with extracted metadata from file
+            metadata_dict.update(doc_metadata)
+
+            # Process document
+            processed_chunks = document_processor.process_document(
+                content=content, metadata=metadata_dict
+            )
+
+            if not processed_chunks:
+                raise RAGException("No chunks were successfully processed")
+
+            processed_metadata = [
+                {k: convert_metadata_value(v) for k, v in chunk.metadata.items()}
+                for chunk in processed_chunks
+            ]
+
+            # Add to database
             db.add_documents(
-                documents=[chunk.content for chunk in all_chunks],
-                embeddings=[chunk.embedding for chunk in all_chunks],
-                metadata=[chunk.metadata for chunk in all_chunks],
+                documents=[chunk.content for chunk in processed_chunks],
+                embeddings=[chunk.embedding for chunk in processed_chunks],
+                metadata=processed_metadata,
                 ids=[
                     f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
-                    for chunk in all_chunks
+                    for chunk in processed_chunks
                 ],
             )
 
-            logger.info(
-                f"Successfully uploaded {len(all_chunks)} chunks from {len(parent_doc_ids)} documents"
-            )
-
             return DocumentUploadResponse(
-                message=f"Successfully processed {len(request.documents)} documents into {len(all_chunks)} chunks",
-                document_ids=parent_doc_ids,
+                message=f"Successfully processed file: {file.filename}",
+                document_ids=[processed_chunks[0].metadata["parent_id"]],
                 metadata={
-                    "document_count": len(request.documents),
-                    "chunk_count": len(all_chunks),
-                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                    "file_type": metadata_dict["file_type"],
+                    "chunk_count": len(processed_chunks),
+                    "timestamp": metadata_dict["timestamp"],
+                    "original_filename": file.filename,
                 },
             )
 
-        except Exception as db_error:
-            logger.error(f"Database error: {str(db_error)}")
-            raise DatabaseError(f"Failed to store documents: {str(db_error)}")
-    else:
-        raise RAGException("No chunks were successfully processed")
+        finally:
+            # Cleanup temporary file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+
+    except Exception as e:
+        logger.error(f"Error processing upload: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def convert_metadata_value(value):
+    """Convert metadata values to ChromaDB-compatible format."""
+    if isinstance(value, list):
+        return ",".join(str(v) for v in value)
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)

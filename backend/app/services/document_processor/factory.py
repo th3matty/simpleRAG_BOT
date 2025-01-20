@@ -26,11 +26,15 @@ class DocumentProcessorFactory:
             file_extensions: List of file extensions (e.g., ['.pdf', '.PDF'])
             processor_class: The processor class to handle these extensions
         """
+        logger.info(
+            f"Registering processor {processor_class.__name__} for extensions: {file_extensions}"
+        )
         for ext in file_extensions:
             cls._processors[ext.lower()] = processor_class
+        logger.info(f"Current registered processors: {list(cls._processors.keys())}")
 
     @classmethod
-    def get_processor(cls, file_path: str) -> BaseDocumentProcessor:
+    def get_processor(cls, file_ext: str) -> BaseDocumentProcessor:
         """
         Get appropriate processor for a file.
 
@@ -43,15 +47,17 @@ class DocumentProcessorFactory:
         Raises:
             ValueError: If no processor is registered for the file type
         """
-        _, file_extension = os.path.splitext(file_path)
-        processor_class = cls._processors.get(file_extension.lower())
+        logger.info(f"Attempting to get processor for extension: {file_ext}")
+        logger.info(f"Available processors: {list(cls._processors.keys())}")
+
+        file_ext = file_ext.lower()
+        processor_class = cls._processors.get(file_ext)
 
         if not processor_class:
             supported_formats = list(cls._processors.keys())
             raise ValueError(
-                f"No processor registered for {file_extension}. "
-                f"Supported formats: {supported_formats}"
+                f"Unsupported file type: {file_ext}. Supported formats: {supported_formats}"
             )
 
-        logger.info(f"Using {processor_class.__name__} for {file_path}")
+        logger.info(f"Found processor {processor_class.__name__} for {file_ext}")
         return processor_class()
