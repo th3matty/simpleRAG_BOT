@@ -130,9 +130,7 @@ class DocumentProcessor:
                                 if temp_chunk:
                                     chunk_text = " ".join(temp_chunk)
                                     chunks.append(chunk_text)
-                                    logger.debug(
-                                        f"Created sentence-based chunk of length {len(chunk_text)}"
-                                    )
+
                                 temp_chunk = [sentence]
                                 temp_length = len(sentence)
                             else:
@@ -142,9 +140,7 @@ class DocumentProcessor:
                         if temp_chunk:
                             chunk_text = " ".join(temp_chunk)
                             chunks.append(chunk_text)
-                            logger.debug(
-                                f"Created final sentence-based chunk of length {len(chunk_text)}"
-                            )
+
                     else:
                         current_chunk = [paragraph]
                         current_length = len(paragraph)
@@ -156,7 +152,6 @@ class DocumentProcessor:
             if current_chunk:
                 chunk_text = "\n\n".join(current_chunk)
                 chunks.append(chunk_text)
-                logger.debug(f"Created final chunk of length {len(chunk_text)}")
 
         logger.info(f"Created total of {len(chunks)} chunks")
         return chunks

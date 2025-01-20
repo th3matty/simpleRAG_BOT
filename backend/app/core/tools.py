@@ -13,6 +13,7 @@ from ..services.embeddings import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
+
 TOOLS = [
     {
         "name": "search_documents",
@@ -113,9 +114,9 @@ class ToolExecutor:
                 similarity = (2 - distance) / 2
 
                 # Determine relevance category based on similarity threshold
-                if similarity >= 0.8:
+                if similarity >= settings.high_similarity_threshold:
                     relevance = "High"
-                elif similarity >= 0.6:
+                elif similarity >= settings.moderate_similarity_threshold:
                     relevance = "Moderate"
                 else:
                     relevance = "Low"

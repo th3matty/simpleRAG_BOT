@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     )
     max_tokens: int = Field(1000, description="Maximum tokens in LLM response")
     top_k_results: int = Field(5, description="Number of similar documents to retrieve")
+
+    # Similarity Thresholds
+    high_similarity_threshold: float = Field(
+        0.8, description="Threshold for high relevance matches", ge=0.0, le=1.0
+    )
+    moderate_similarity_threshold: float = Field(
+        0.6, description="Threshold for moderate relevance matches", ge=0.0, le=1.0
+    )
     similarity_threshold: float = Field(
         0.5,
         description="Minimum similarity score for relevant documents (lower = more permissive)",
