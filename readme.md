@@ -54,21 +54,56 @@ A robust RAG system built with FastAPI, ChromaDB, and Anthropic's Claude for int
 backend/
 ├── app/
 │   ├── routes/
-│   │   └── chat.py         # API endpoints
+│   │   └── chat.py                    # API endpoints
 │   ├── services/
-│   │   ├── calculator.py   # Calculator tool implementation
-│   │   ├── embeddings.py   # Embedding generation
-│   │   ├── llm.py         # LLM interaction
-│   │   └── tools.py       # Tool system and registry
-│   ├── config.py          # Configuration management
-│   ├── database.py        # Database operations
-│   ├── exceptions.py      # Custom exceptions
-│   └── main.py           # Application entry point
+│   │   ├── calculator.py              # Calculator tool implementation
+│   │   ├── embeddings.py              # Embedding generation
+│   │   ├── llm.py                     # LLM interaction
+│   │   ├── chunker.py                 # Text chunking service
+│   │   ├── file_handler.py            # File operations
+│   │   ├── document_processor/        # Document processors
+│   │   │   ├── base.py               # Base processor class
+│   │   │   ├── csv_processor.py      # CSV file processor
+│   │   │   ├── docx_processor.py     # DOCX file processor
+│   │   │   ├── factory.py            # Processor factory
+│   │   │   └── pdf_processor.py      # PDF file processor
+│   │   └── tools.py                   # Tool system and registry
+│   ├── core/
+│   │   ├── config.py                  # Configuration management
+│   │   ├── database.py                # Database operations
+│   │   ├── exceptions.py              # Custom exceptions
+│   │   └── tools.py                   # Core tool utilities
+│   └── main.py                        # Application entry point
+├── data/
+│   └── test_documents/                # Test document storage
+│       ├── article1.md                # Sample markdown files
+│       ├── article2.md
+│       ├── article3.md
+│       ├── article4.md
+│       └── test_formats/              # Test files for processors
+├── docs/                              # Documentation
+│   ├── chunker.md
+│   ├── client-query.md
+│   └── document-upload.md
 ├── scripts/
-│   └── load_test_data.py  # Data loading utility
-├── tests/                # Test suite
-├── .env.example         # Environment variables template
-└── logs/               # Application logs
+│   ├── data_loading/                  # Data loading utilities
+│   │   └── load_test_data.py
+│   ├── evaluation/                    # Evaluation scripts
+│   │   ├── evaluate_chunking.py
+│   │   ├── evaluate_cluster_chunking.py
+│   │   ├── evaluate_recursive_Langchain_char_chunking.py
+│   │   └── evaluate_sliding_chunking.py
+│   └── prompts/                       # Prompt templates
+│       ├── output_for_test_cases.json
+│       └── system_prompt_chatgpt_4o.md
+├── tests/                             # Test suite
+│   ├── conftest.py
+│   ├── test_calculator.py
+│   ├── test_csv_processor.py
+│   ├── test_docx_processor.py
+│   └── test_pdf_processor.py
+├── .env.example                       # Environment template
+└── logs/                             # Application logs
 ```
 
 ## Setup
