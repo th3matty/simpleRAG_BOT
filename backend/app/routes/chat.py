@@ -17,109 +17,26 @@ from ..core.tools import ToolExecutor
 from ..core.database import db
 from ..core.config import settings
 from ..core.exceptions import DatabaseError, RAGException
+from app.models import (
+    ChatRequest,
+    DocumentSource,
+    ChatResponse,
+    DocumentListResponse,
+    DocumentUploadResponse,
+    DocumentUploadRequest,
+    FileUploadMetadata,
+    FileUploadRequest,
+    DocumentMetadata,
+    DocumentInput,
+    DocumentChunk,
+    DocumentComplete,
+)
 
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# Chat-related models
-class ChatRequest(BaseModel):
-    query: str = Field(..., description="User query string", min_length=1)
-
-
-class DocumentSource(BaseModel):
-    content: str = Field(..., description="Source document content")
-    metadata: Dict[str, Any] = Field(..., description="Source document metadata")
-
-
-class ChatResponse(BaseModel):
-    response: str = Field(..., description="Generated response from LLM")
-    sources: List[DocumentSource] = Field(
-        default=[], description="Source documents used for response"
-    )
-    metadata: Dict[str, Any] = Field(
-        ..., description="Response metadata including token usage"
-    )
-    tool_used: Optional[str] = Field(None, description="Name of the tool that was used")
-    tool_input: Optional[Dict[str, Any]] = Field(
-        None, description="Input provided to the tool"
-    )
-    tool_result: Optional[str] = Field(None, description="Result returned by the tool")
-
-
-# Document-related models
-
-
-class DocumentMetadata(BaseModel):
-    title: Optional[str] = Field(None, description="Document title")
-    source: str = Field(default="api-upload", description="Source of the document")
-    tags: List[str] = Field(
-        default_factory=list, description="Tags for categorizing the document"
-    )
-
-
-class DocumentInput(BaseModel):
-    content: str = Field(..., description="Document content")
-    metadata: Optional[DocumentMetadata] = None
-
-
-class DocumentChunk(BaseModel):
-    """Represents a single chunk of a document with its metadata"""
-
-    content: str = Field(..., description="Chunk content")
-    chunk_index: int = Field(..., description="Position of chunk in original document")
-    metadata: Dict[str, Any] = Field(..., description="Chunk-specific metadata")
-    embedding: Optional[List[float]] = Field(
-        None, description="Vector embedding of the chunk"
-    )
-
-
-class DocumentComplete(BaseModel):
-    """Represents a complete document with all its chunks"""
-
-    document_id: str = Field(..., description="Unique identifier for the document")
-    title: Optional[str] = Field(None, description="Document title")
-    source: str = Field(..., description="Document source")
-    chunks: List[DocumentChunk] = Field(..., description="List of document chunks")
-    metadata: Dict[str, Any] = Field(..., description="Document-level metadata")
-
-
-# Response models
-class DocumentListResponse(BaseModel):
-    """Response model for document retrieval"""
-
-    count: int = Field(..., description="Total number of documents")
-    documents: List[DocumentComplete] = Field(
-        ..., description="List of documents with their chunks"
-    )
-
-
-class DocumentUploadResponse(BaseModel):
-    message: str
-    document_ids: List[str]
-    metadata: Dict[str, Any] = Field(
-        ..., description="Response metadata including token usage"
-    )
-
-
-# Request Model
-class DocumentUploadRequest(BaseModel):
-    documents: List[DocumentInput] = Field(
-        ..., description="List of documents with their metadata"
-    )
-
-
-class FileUploadMetadata(BaseModel):
-    title: Optional[str] = None
-    source: str = Field(default="api-upload")
-    tags: List[str] = Field(default_factory=list)
-
-
-class FileUploadRequest(BaseModel):
-    metadata: Optional[FileUploadMetadata] = None
 
 
 def get_llm_service() -> LLMService:
