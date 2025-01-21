@@ -1,20 +1,28 @@
-# Import your actual models here
-__all__ = []
+# models/__init__.py
+from .model_chat import ChatRequest, ChatResponse
+from .model_document import (
+    DocumentSource,
+    DocumentType,
+    DocumentMetadata,
+    DocumentChunk,
+    DocumentComplete,
+    DocumentInput,
+)
+from .model_requests import DocumentUploadRequest, FileUploadRequest, FileUploadMetadata
+from .model_responses import DocumentListResponse, DocumentUploadResponse
 
-from enum import Enum
-from typing import Optional
-from pydantic import BaseModel
-from fastapi import UploadFile
-
-from routes.chat import DocumentMetadata
-
-
-class DocumentType(Enum):
-    PDF = "pdf"
-    DOCX = "docx"
-    CSV = "csv"
-    TEXT = "text"  # for direct text input
-
-
-class FileUploadRequest(BaseModel):
-    metadata: Optional[DocumentMetadata] = None
+__all__ = [
+    "ChatRequest",
+    "ChatResponse",
+    "DocumentType",
+    "DocumentMetadata",
+    "DocumentSource",
+    "DocumentChunk",
+    "DocumentComplete",
+    "DocumentInput",
+    "DocumentUploadRequest",
+    "FileUploadRequest",
+    "FileUploadMetadata",
+    "DocumentListResponse",
+    "DocumentUploadResponse",
+]
