@@ -73,6 +73,9 @@ class DocumentChunk(BaseModel):
     content: str = Field(..., description="Chunk content")
     chunk_index: int = Field(..., description="Position of chunk in original document")
     metadata: Dict[str, Any] = Field(..., description="Chunk-specific metadata")
+    embedding: Optional[List[float]] = Field(
+        None, description="Vector embedding of the chunk"
+    )
 
 
 class DocumentComplete(BaseModel):
@@ -246,13 +249,10 @@ async def get_documents():
     """
     try:
         logger.info("Retrieving all documents from database")
-
-        # Add debug logging
         logger.debug(f"Using ChromaDB directory: {settings.chroma_persist_directory}")
 
         # Get all documents from the database
-        results = db.get_all_documents()
-        # Add debug logging for results
+        results = db.collection.get(include=["documents", "metadatas", "embeddings"])
         logger.debug(f"Raw database results: {results}")
 
         if not results or not results["documents"]:
@@ -263,8 +263,11 @@ async def get_documents():
         document_chunks = defaultdict(list)
 
         # Process each chunk and organize by parent document
-        for doc, meta, doc_id in zip(
-            results["documents"], results["metadatas"], results["ids"]
+        for doc, meta, embedding, doc_id in zip(
+            results["documents"],
+            results["metadatas"],
+            results["embeddings"],
+            results["ids"],
         ):
             # Extract parent_id from metadata
             parent_id = meta.get("parent_id")
@@ -281,6 +284,7 @@ async def get_documents():
                     for k, v in meta.items()
                     if k not in ["parent_id", "chunk_index"]
                 },
+                embedding=embedding.tolist() if embedding is not None else None,
             )
 
             document_chunks[parent_id].append(chunk)
