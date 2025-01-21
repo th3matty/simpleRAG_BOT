@@ -1,0 +1,25 @@
+{
+  "document_id": "doc_1737460660_article1.md",
+  "title": null,
+  "source": "article1.md",
+  "chunks": [
+    {
+      "content": "# biologie-wissenschaften",
+      "chunk_index": 0,
+      "metadata": {
+        "chunk_length": 12,
+        "file_type": "markdown",
+        "original_filename": "article1.md",
+        "source": "article1.md",
+        "total_chunks": 35
+      },
+      "embedding": [-0.0028109021950513124, 0.09186619520187378]
+    }
+  ],
+  "metadata": {
+    "timestamp": null,
+    "tags": [],
+    "total_chunks": 25,
+    "file_type": "markdown"
+  }
+}
