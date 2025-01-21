@@ -1,7 +1,7 @@
 # models/document.py
+from enum import Enum
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from enum import Enum
 
 
 class DocumentType(Enum):
@@ -39,3 +39,8 @@ class DocumentComplete(BaseModel):
     source: str = Field(..., description="Document source")
     chunks: List[DocumentChunk] = Field(..., description="List of document chunks")
     metadata: Dict[str, Any] = Field(..., description="Document-level metadata")
+
+
+class DocumentInput(BaseModel):
+    content: str = Field(..., description="Document content")
+    metadata: Optional[DocumentMetadata] = None

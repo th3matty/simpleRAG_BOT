@@ -1,7 +1,7 @@
 # models/requests.py
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from .model_document import DocumentMetadata, DocumentInput
+from .model_document import DocumentInput
 
 
 class DocumentUploadRequest(BaseModel):

@@ -17,17 +17,12 @@ from ..core.tools import ToolExecutor
 from ..core.database import db
 from ..core.config import settings
 from ..core.exceptions import DatabaseError, RAGException
-from app.models import (
+from ..models import (
     ChatRequest,
     DocumentSource,
     ChatResponse,
     DocumentListResponse,
     DocumentUploadResponse,
-    DocumentUploadRequest,
-    FileUploadMetadata,
-    FileUploadRequest,
-    DocumentMetadata,
-    DocumentInput,
     DocumentChunk,
     DocumentComplete,
 )
@@ -316,11 +311,6 @@ async def update_file_document(
                 ),
             },
             "changes": {
-                "chunks_diff": (
-                    len(result["document_ids"]) - len(old_results["ids"])
-                    if old_results["ids"]
-                    else "new document"
-                ),
                 "update_timestamp": datetime.datetime.utcnow().isoformat(),
             },
         }
