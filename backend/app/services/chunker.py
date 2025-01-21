@@ -45,39 +45,12 @@ class DocumentProcessor:
         """Generate embedding for a piece of text."""
         return self.embedding_service.get_single_embedding(text)
 
-    def _extract_title(self, content: str) -> Optional[str]:
-        """
-        Extract title from document content, handling multiple formats.
-        First tries markdown headers, then falls back to first non-empty line.
-        """
-        if content.startswith("#"):
-            title_match = re.match(r"^#\s+(.+)$", content.split("\n")[0])
-            if title_match:
-                title = title_match.group(1)
-                logger.debug(f"Extracted markdown title: {title}")
-                return title
-
-        lines = content.split("\n")
-        for line in lines:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                title = line[:100] if len(line) > 100 else line
-                logger.debug(f"Using first line as title: {title}")
-                return title
-
-        logger.debug("No title found in content")
-        return None
-
     def _split_into_sections(self, text: str) -> List[str]:
-        """
-        Split text into major sections based on markdown headers.
-        This preserves the document's high-level structure.
-        """
-        sections = re.split(r"\n(?=#+\s)", text)
-        logger.debug(f"Split document into {len(sections)} major sections")
-        for idx, section in enumerate(sections):
-            logger.debug(f"Section {idx} preview: {section[:100]}...")
-        return sections
+        """Split text into sections by natural breaks."""
+        # No longer split by markdown headers
+        sections = text.split("\n\n")  # Split by paragraph breaks
+        logger.debug(f"Split document into {len(sections)} sections")
+        return [s for s in sections if s.strip()]  # Remove empty sections
 
     def _split_into_semantic_chunks(self, text: str) -> List[str]:
         """
@@ -167,12 +140,6 @@ class DocumentProcessor:
             doc_id = f"doc_{int(time.time())}_{metadata.get('source', 'unknown')}"
             logger.info(f"Starting to process document with ID: {doc_id}")
             logger.info(f"Document content length: {len(content)} characters")
-
-            # Extract and add title to metadata
-            title = self._extract_title(content)
-            if title:
-                metadata["title"] = title
-                logger.info(f"Extracted title: {title}")
 
             # Split document into chunks
             chunks = self._split_into_semantic_chunks(content)
