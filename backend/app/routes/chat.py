@@ -73,6 +73,9 @@ class DocumentChunk(BaseModel):
     content: str = Field(..., description="Chunk content")
     chunk_index: int = Field(..., description="Position of chunk in original document")
     metadata: Dict[str, Any] = Field(..., description="Chunk-specific metadata")
+    embedding: Optional[List[float]] = Field(
+        None, description="Vector embedding of the chunk"
+    )
 
 
 class DocumentComplete(BaseModel):
@@ -246,13 +249,10 @@ async def get_documents():
     """
     try:
         logger.info("Retrieving all documents from database")
-
-        # Add debug logging
         logger.debug(f"Using ChromaDB directory: {settings.chroma_persist_directory}")
 
         # Get all documents from the database
-        results = db.get_all_documents()
-        # Add debug logging for results
+        results = db.collection.get(include=["documents", "metadatas", "embeddings"])
         logger.debug(f"Raw database results: {results}")
 
         if not results or not results["documents"]:
@@ -263,8 +263,11 @@ async def get_documents():
         document_chunks = defaultdict(list)
 
         # Process each chunk and organize by parent document
-        for doc, meta, doc_id in zip(
-            results["documents"], results["metadatas"], results["ids"]
+        for doc, meta, embedding, doc_id in zip(
+            results["documents"],
+            results["metadatas"],
+            results["embeddings"],
+            results["ids"],
         ):
             # Extract parent_id from metadata
             parent_id = meta.get("parent_id")
@@ -281,6 +284,7 @@ async def get_documents():
                     for k, v in meta.items()
                     if k not in ["parent_id", "chunk_index"]
                 },
+                embedding=embedding.tolist() if embedding is not None else None,
             )
 
             document_chunks[parent_id].append(chunk)
@@ -317,111 +321,6 @@ async def get_documents():
     except Exception as e:
         logger.error(f"Error retrieving documents: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve documents")
-
-
-# TODO: remove and refactor upload/file endpoint
-# @router.post("/documents/upload", response_model=DocumentUploadResponse)
-# async def upload_documents(
-#     request: DocumentUploadRequest,
-#     embedding_service: EmbeddingService = Depends(get_embedding_service),
-# ):
-#     """
-#     Upload and process documents using our semantic chunking system.
-#     Each document is split into meaningful chunks while preserving context and structure.
-
-#     Args:
-#         request: DocumentUploadRequest containing list of documents
-#         embedding_service: Injected embedding service
-
-#     Returns:
-#         DocumentUploadResponse containing success message and document IDs
-#     """
-
-#     try:
-#         document_processor = DocumentProcessor(embedding_service=embedding_service)
-#         return await process_documents_upload(request, document_processor)
-
-#     except Exception as e:
-#         logger.error(f"Unexpected error: {str(e)}")
-#         raise HTTPException(status_code=500, detail="Internal server error")
-
-
-# async def process_documents_upload(
-#     request, document_processor
-# ) -> DocumentUploadResponse:
-#     all_chunks = []
-#     parent_doc_ids = []
-
-#     # Process each document
-#     for doc in request.documents:
-#         try:
-#             # Prepare metadata with defaults if none provided
-#             metadata = {
-#                 "source": "api-upload",
-#                 "timestamp": datetime.datetime.utcnow().isoformat(),
-#             }
-
-#             if doc.metadata:
-#                 metadata.update(
-#                     {
-#                         "source": doc.metadata.source,
-#                         "tags": (
-#                             ",".join(doc.metadata.tags) if doc.metadata.tags else ""
-#                         ),
-#                     }
-#                 )
-#                 if doc.metadata.title:
-#                     metadata["title"] = doc.metadata.title
-
-#             # Process document into chunks
-#             processed_chunks = document_processor.process_document(
-#                 content=doc.content, metadata=metadata
-#             )
-
-#             if processed_chunks:
-#                 all_chunks.extend(processed_chunks)
-#                 parent_doc_ids.append(processed_chunks[0].metadata["parent_id"])
-#                 logger.info(f"Document processed into {len(processed_chunks)} chunks")
-
-#         except Exception as doc_error:
-#             logger.error(f"Error processing document: {str(doc_error)}")
-#             continue
-
-#     # Add all chunks to the database
-#     if all_chunks:
-#         try:
-#             db.add_documents(
-#                 documents=[chunk.content for chunk in all_chunks],
-#                 embeddings=[chunk.embedding for chunk in all_chunks],
-#                 metadata=[chunk.metadata for chunk in all_chunks],
-#                 ids=[
-#                     f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
-#                     for chunk in all_chunks
-#                 ],
-#             )
-
-#             logger.info(
-#                 f"Successfully uploaded {len(all_chunks)} chunks from {len(parent_doc_ids)} documents"
-#             )
-
-#             return DocumentUploadResponse(
-#                 message=f"Successfully processed {len(request.documents)} documents into {len(all_chunks)} chunks",
-#                 document_ids=parent_doc_ids,
-#                 metadata={
-#                     "document_count": len(request.documents),
-#                     "chunk_count": len(all_chunks),
-#                     "timestamp": datetime.datetime.utcnow().isoformat(),
-#                 },
-#             )
-
-#         except Exception as db_error:
-#             logger.error(f"Database error: {str(db_error)}")
-#             raise DatabaseError(f"Failed to store documents: {str(db_error)}")
-#     else:
-#         raise RAGException("No chunks were successfully processed")
-
-
-# In chat.py, add this new endpoint
 
 
 @router.post("/documents/upload/file", response_model=DocumentUploadResponse)
