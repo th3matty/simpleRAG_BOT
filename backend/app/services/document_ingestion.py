@@ -53,14 +53,14 @@ class DocumentIngestionService:
             "original_filename": filename,
             "file_type": file_ext.replace(".", ""),
         }
+        # Update with extracted metadata from file
+        metadata.update(doc_metadata)
 
         if title:
             metadata["title"] = title
         if tags:
             metadata["tags"] = ",".join(tags.split(","))
 
-        # Update with extracted metadata from file
-        metadata.update(doc_metadata)
         return metadata
 
     async def process_file(self, file, title=None, source="file-upload", tags=None):

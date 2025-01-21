@@ -322,132 +322,6 @@ async def get_documents():
         raise HTTPException(status_code=500, detail="Failed to retrieve documents")
 
 
-# @router.post("/documents/upload/file", response_model=DocumentUploadResponse)
-# async def upload_file_document(
-#     file: UploadFile = File(...),
-#     title: Optional[str] = Form(None),
-#     source: Optional[str] = Form("file-upload"),
-#     tags: Optional[str] = Form(None),
-#     embedding_service: EmbeddingService = Depends(get_embedding_service),
-# ):
-#     try:
-#         logger.info("Starting file upload process")
-#         logger.info(f"Received file: {file.filename}")
-
-#         # Validate file
-#         if not file.filename:
-#             raise HTTPException(status_code=400, detail="No filename provided")
-
-#         file_ext = Path(file.filename).suffix.lower()
-#         logger.info(f"Extracted file extension: '{file_ext}'")
-
-#         if not file_ext:
-#             logger.error("No file extension found")
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail="File must have a valid extension (.pdf, .docx, or .csv)",
-#             )
-
-#         # Initialize processors
-#         logger.info("Initializing processors")
-#         document_processor = DocumentProcessor(embedding_service=embedding_service)
-#         file_handler = FileHandler()
-
-#         # Get the appropriate processor
-#         try:
-#             logger.info(f"Getting processor for extension: {file_ext}")
-#             processor = DocumentProcessorFactory.get_processor(file_ext)
-#             logger.info(f"Successfully got processor for {file_ext}")
-#         except ValueError as e:
-#             logger.error(f"Failed to get processor: {str(e)}")
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail=f"Unsupported file type: {file_ext}. Supported formats: ['.pdf', '.docx', '.csv']",
-#             )
-
-#         # Save file temporarily
-#         logger.info("Saving file temporarily")
-#         temp_file_path = await file_handler.save_upload_file_temporarily(file)
-#         logger.info(f"File saved temporarily at: {temp_file_path}")
-
-#         try:
-#             # Extract content and metadata
-#             content = processor.extract_text(temp_file_path)
-#             doc_metadata = processor.extract_metadata(temp_file_path)
-
-#             # Prepare metadata combining all sources
-#             metadata_dict = {
-#                 "source": source,
-#                 "timestamp": datetime.datetime.utcnow().isoformat(),
-#                 "original_filename": file.filename,
-#                 "file_type": file_ext.replace(".", ""),
-#             }
-
-#             # Add optional metadata
-#             if title:
-#                 metadata_dict["title"] = title
-#             if tags:
-#                 metadata_dict["tags"] = ",".join(tags.split(","))
-
-#             # Update with extracted metadata from file
-#             metadata_dict.update(doc_metadata)
-
-#             # Process document
-#             processed_chunks = document_processor.process_document(
-#                 content=content, metadata=metadata_dict
-#             )
-
-#             if not processed_chunks:
-#                 raise RAGException("No chunks were successfully processed")
-
-#             processed_metadata = [
-#                 {k: convert_metadata_value(v) for k, v in chunk.metadata.items()}
-#                 for chunk in processed_chunks
-#             ]
-
-#             # Add to database
-#             db.add_documents(
-#                 documents=[chunk.content for chunk in processed_chunks],
-#                 embeddings=[chunk.embedding for chunk in processed_chunks],
-#                 metadata=processed_metadata,
-#                 ids=[
-#                     f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
-#                     for chunk in processed_chunks
-#                 ],
-#             )
-
-#             return DocumentUploadResponse(
-#                 message=f"Successfully processed file: {file.filename}",
-#                 document_ids=[processed_chunks[0].metadata["parent_id"]],
-#                 metadata={
-#                     "file_type": metadata_dict["file_type"],
-#                     "chunk_count": len(processed_chunks),
-#                     "timestamp": metadata_dict["timestamp"],
-#                     "original_filename": file.filename,
-#                 },
-#             )
-
-#         finally:
-#             # Cleanup temporary file
-#             if os.path.exists(temp_file_path):
-#                 os.unlink(temp_file_path)
-
-#     except Exception as e:
-#         logger.error(f"Error processing upload: {str(e)}")
-#         if isinstance(e, HTTPException):
-#             raise
-#         raise HTTPException(status_code=500, detail=str(e))
-
-
-# def convert_metadata_value(value):
-#     """Convert metadata values to ChromaDB-compatible format."""
-#     if isinstance(value, list):
-#         return ",".join(str(v) for v in value)
-#     if isinstance(value, (bool, int, float, str)):
-#         return value
-#     return str(value)
-
-
 @router.post("/documents/upload/file", response_model=DocumentUploadResponse)
 async def upload_file_document(
     file: UploadFile = File(...),
@@ -472,3 +346,89 @@ async def upload_file_document(
         if isinstance(e, HTTPException):
             raise
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/documents/update/file", response_model=DocumentUploadResponse)
+async def update_file_document(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    source: Optional[str] = Form("file-upload"),
+    tags: Optional[str] = Form(None),
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+):
+    """
+    Update an existing document file or create if it doesn't exist.
+    Deletes the old version if it exists and processes the new version.
+
+    Args:
+        file: File to update
+        title: Optional title for the document
+        source: Source of the document (default: file-upload)
+        tags: Optional tags for categorization
+        embedding_service: Injected embedding service
+
+    Returns:
+        DocumentUploadResponse with update status and metadata
+    """
+    try:
+        # First find if document exists
+        old_results = db.collection.get(where={"original_filename": file.filename})
+
+        # Delete old version if exists
+        if old_results["ids"]:
+            logger.info(
+                f"Found existing document with {len(old_results['ids'])} chunks"
+            )
+            db.collection.delete(ids=old_results["ids"])
+            logger.info("Deleted old version")
+
+        # Use ingestion service to process and save new version
+        ingestion_service = DocumentIngestionService(embedding_service)
+        result = await ingestion_service.process_and_save(file, title, source, tags)
+
+        # Prepare enhanced metadata with update information
+        enhanced_metadata = {
+            **result["metadata"],
+            "updated": True,
+            "previous_version": {
+                "chunk_count": len(old_results["ids"]) if old_results["ids"] else 0,
+                "timestamp": (
+                    old_results["metadatas"][0].get("timestamp")
+                    if old_results["ids"]
+                    else None
+                ),
+            },
+            "changes": {
+                "chunks_diff": (
+                    len(result["document_ids"]) - len(old_results["ids"])
+                    if old_results["ids"]
+                    else "new document"
+                ),
+                "update_timestamp": datetime.datetime.utcnow().isoformat(),
+            },
+        }
+
+        # Prepare response message
+        message = (
+            (
+                f"Successfully updated file: {file.filename}. "
+                f"Previous version had {len(old_results['ids'])} chunks, "
+                f"new version has {len(result['document_ids'])} chunks."
+            )
+            if old_results["ids"]
+            else f"Created new document: {file.filename}"
+        )
+
+        return DocumentUploadResponse(
+            message=message,
+            document_ids=result["document_ids"],
+            metadata=enhanced_metadata,
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating document: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update document: {str(e)}"
+        )
