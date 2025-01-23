@@ -100,7 +100,7 @@ class ToolExecutor:
 
             # Format results as a string with similarity scores
             formatted_results = []
-            for doc, meta, distance, doc_id in zip(
+            for doc, metadata, distance, doc_id in zip(
                 results["documents"][0],
                 results["metadatas"][0],
                 results["distances"][0],

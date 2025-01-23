@@ -40,24 +40,37 @@ class ChromaDB:
                 f"Querying documents with threshold {settings.similarity_threshold}"
             )
 
-            # Query with similarity threshold
-            # ChromaDB uses distance (0 is most similar), so convert similarity to distance
-            distance_threshold = 1 - settings.similarity_threshold
-
+            # Query for top results and filter by similarity threshold later if needed
             results = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=n_results,
-                where={"distance": {"$lte": distance_threshold}},
             )
 
-            # If no results meet the threshold, fall back to top results without threshold
-            if not results["documents"] or not results["documents"][0]:
-                logger.debug(
-                    "No results met similarity threshold, falling back to top results"
-                )
-                results = self.collection.query(
-                    query_embeddings=[query_embedding], n_results=n_results
-                )
+            # Filter results by similarity threshold if we have any results
+            if results["documents"] and results["documents"][0]:
+                # Initialize lists for filtered results
+                filtered_docs = []
+                filtered_meta = []
+                filtered_dist = []
+                filtered_ids = []
+
+                for i, distance in enumerate(results["distances"][0]):
+                    # Convert distance to similarity (ChromaDB uses cosine distance)
+                    similarity = (2 - distance) / 2
+                    if similarity >= settings.similarity_threshold:
+                        filtered_docs.append(results["documents"][0][i])
+                        filtered_meta.append(results["metadatas"][0][i])
+                        filtered_dist.append(distance)
+                        filtered_ids.append(results["ids"][0][i])
+
+                # If we have filtered results, update results with filtered data
+                if filtered_docs:
+                    results = {
+                        "documents": [filtered_docs],
+                        "metadatas": [filtered_meta],
+                        "distances": [filtered_dist],
+                        "ids": [filtered_ids],
+                    }
 
             return results
         except Exception as e:

@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 def load_test_documents():
     client = chromadb.PersistentClient(path=settings.chroma_persist_directory)
     embedding_service = EmbeddingService(model_name=settings.embedding_model)
-    document_processor = DocumentProcessor(embedding_service=embedding_service)
+    document_processor = DocumentProcessor(
+        embedding_service=embedding_service, max_chunk_size=800, chunk_overlap=200
+    )
 
     # Get or create collection
     collection_name = "documents"
