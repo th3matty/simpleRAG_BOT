@@ -110,8 +110,8 @@ def main():
     # Test configurations
     configs = [
         {"size": 800, "overlap": 200},  # Our default configuration
-        {"size": 1000, "overlap": 200},  # Larger chunks
-        {"size": 600, "overlap": 150},  # Smaller chunks
+        # {"size": 1000, "overlap": 200},  # Larger chunks
+        # {"size": 600, "overlap": 150},  # Smaller chunks
     ]
 
     # Initialize evaluation
