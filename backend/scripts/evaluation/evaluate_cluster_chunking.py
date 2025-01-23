@@ -10,7 +10,7 @@ os.environ["ENV_FILE"] = str(backend_dir / ".env")
 
 from chromadb.utils import embedding_functions
 from app.core.config import settings
-from chunking_evaluation import BaseChunker, GeneralEvaluation
+from chunking_evaluation import GeneralEvaluation
 from chunking_evaluation import ClusterSemanticChunker
 import logging
 

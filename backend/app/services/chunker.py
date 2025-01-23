@@ -27,7 +27,9 @@ class DocumentProcessor:
     while creating appropriately sized chunks.
     """
 
-    def __init__(self, embedding_service, max_chunk_size: int = 400):
+    def __init__(
+        self, embedding_service, max_chunk_size: int = 800, chunk_overlap: int = 200
+    ):
         """
         Initialize the document processor with necessary parameters.
 
@@ -37,6 +39,7 @@ class DocumentProcessor:
         """
         self.embedding_service = embedding_service
         self.max_chunk_size = max_chunk_size
+        self.chunk_overlap = chunk_overlap
         logger.info(
             f"Initialized DocumentProcessor with max_chunk_size: {max_chunk_size}"
         )
@@ -52,20 +55,104 @@ class DocumentProcessor:
         logger.debug(f"Split document into {len(sections)} sections")
         return [s for s in sections if s.strip()]  # Remove empty sections
 
+    # def _split_into_semantic_chunks(self, text: str) -> List[str]:
+    #     """
+    #     Split text into semantically meaningful chunks while respecting size limits.
+    #     This method tries to keep related content together while ensuring chunks
+    #     aren't too large.
+    #     """
+    #     # First split by major sections (headers)
+    #     sections = self._split_into_sections(text)
+
+    #     chunks = []
+    #     for section_idx, section in enumerate(sections):
+    #         logger.debug(f"Processing section {section_idx}")
+
+    #         current_chunk = []
+    #         current_length = 0
+
+    #         # Split section into paragraphs
+    #         paragraphs = section.split("\n\n")
+
+    #         for para_idx, paragraph in enumerate(paragraphs):
+    #             paragraph = paragraph.strip()
+    #             if not paragraph:
+    #                 continue
+
+    #             logger.debug(
+    #                 f"Processing paragraph {para_idx} in section {section_idx}"
+    #             )
+    #             logger.debug(f"Paragraph length: {len(paragraph)}")
+
+    #             # If adding this paragraph would exceed max size
+    #             if current_length + len(paragraph) > self.max_chunk_size:
+    #                 # Save current chunk if it exists
+    #                 if current_chunk:
+    #                     chunk_text = "\n\n".join(current_chunk)
+    #                     chunks.append(chunk_text)
+    #                     # Create overlap by keeping some of the previous content
+    #                     overlap_text = chunk_text[-self.chunk_overlap :]
+    #                     current_chunk = [overlap_text]
+    #                     current_length = len(overlap_text)
+
+    #                 # Handle paragraphs that are themselves too long
+    #                 if len(paragraph) > self.max_chunk_size:
+    #                     logger.debug("Processing oversized paragraph")
+    #                     # Split by sentences
+    #                     sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+    #                     temp_chunk = []
+    #                     temp_length = 0
+
+    #                     for sentence in enumerate(sentences):
+    #                         if temp_length + len(sentence) > self.max_chunk_size:
+    #                             if temp_chunk:
+    #                                 chunk_text = " ".join(temp_chunk)
+    #                                 chunks.append(chunk_text)
+
+    #                                 # Create sentence-level overlap
+    #                                 last_sentences = " ".join(
+    #                                     temp_chunk[-2:]
+    #                                 )  # Keep last 2 sentences
+    #                                 temp_chunk = [last_sentences]
+    #                                 temp_length = len(last_sentences)
+
+    #                             temp_chunk = [sentence]
+    #                             temp_length = len(sentence)
+    #                         else:
+    #                             temp_chunk.append(sentence)
+    #                             temp_length += len(sentence) + 1  # +1 for space
+
+    #                     if temp_chunk:
+    #                         chunk_text = " ".join(temp_chunk)
+    #                         chunks.append(chunk_text)
+
+    #                 else:
+    #                     current_chunk = [paragraph]
+    #                     current_length = len(paragraph)
+    #             else:
+    #                 current_chunk.append(paragraph)
+    #                 current_length += len(paragraph) + 2  # +2 for paragraph separator
+
+    #         # Add any remaining content in the current chunk
+    #         if current_chunk:
+    #             chunk_text = "\n\n".join(current_chunk)
+    #             chunks.append(chunk_text)
+
+    #     logger.info(f"Created total of {len(chunks)} chunks")
+    #     return chunks
+
+    # app/services/chunker.py
+
     def _split_into_semantic_chunks(self, text: str) -> List[str]:
         """
-        Split text into semantically meaningful chunks while respecting size limits.
-        This method tries to keep related content together while ensuring chunks
-        aren't too large.
+        Split text into semantically meaningful chunks with consistent overlap.
         """
-        # First split by major sections (headers)
         sections = self._split_into_sections(text)
-
         chunks = []
-        for section_idx, section in enumerate(sections):
-            logger.debug(f"Processing section {section_idx}")
 
-            # Split section into paragraphs
+        for section_idx, section in enumerate(sections):
+            logger.debug(f"Processing section {section_idx + 1} of {len(sections)}")
+
             paragraphs = section.split("\n\n")
             current_chunk = []
             current_length = 0
@@ -75,58 +162,59 @@ class DocumentProcessor:
                 if not paragraph:
                     continue
 
-                logger.debug(
-                    f"Processing paragraph {para_idx} in section {section_idx}"
-                )
-                logger.debug(f"Paragraph length: {len(paragraph)}")
+                paragraph_length = len(paragraph)
 
-                # If adding this paragraph would exceed max size
-                if current_length + len(paragraph) > self.max_chunk_size:
-                    # Save current chunk if it exists
+                # If this paragraph would exceed the chunk size
+                if current_length + paragraph_length > self.max_chunk_size:
                     if current_chunk:
+                        # Save current chunk
                         chunk_text = "\n\n".join(current_chunk)
                         chunks.append(chunk_text)
                         logger.debug(f"Created chunk of length {len(chunk_text)}")
-                        current_chunk = []
-                        current_length = 0
 
-                    # Handle paragraphs that are themselves too long
-                    if len(paragraph) > self.max_chunk_size:
-                        logger.debug("Processing oversized paragraph")
-                        # Split by sentences
+                        # Keep overlap from the end of previous chunk
+                        overlap_text = chunk_text[-self.chunk_overlap :]
+                        current_chunk = [overlap_text]
+                        current_length = len(overlap_text)
+
+                    # Handle large paragraphs
+                    if paragraph_length > self.max_chunk_size:
                         sentences = re.split(r"(?<=[.!?])\s+", paragraph)
-                        temp_chunk = []
-                        temp_length = 0
+                        sentence_chunk = []
+                        sentence_length = 0
 
-                        for sent_idx, sentence in enumerate(sentences):
-                            if temp_length + len(sentence) > self.max_chunk_size:
-                                if temp_chunk:
-                                    chunk_text = " ".join(temp_chunk)
-                                    chunks.append(chunk_text)
+                        for sentence in sentences:
+                            if sentence_length + len(sentence) > self.max_chunk_size:
+                                if sentence_chunk:
+                                    chunks.append(" ".join(sentence_chunk))
 
-                                temp_chunk = [sentence]
-                                temp_length = len(sentence)
+                                    # Keep last sentence for overlap
+                                    sentence_chunk = [sentence_chunk[-1], sentence]
+                                    sentence_length = sum(
+                                        len(s) for s in sentence_chunk
+                                    )
                             else:
-                                temp_chunk.append(sentence)
-                                temp_length += len(sentence) + 1  # +1 for space
+                                sentence_chunk.append(sentence)
+                                sentence_length += len(sentence) + 1
 
-                        if temp_chunk:
-                            chunk_text = " ".join(temp_chunk)
-                            chunks.append(chunk_text)
-
+                        if sentence_chunk:
+                            chunks.append(" ".join(sentence_chunk))
                     else:
                         current_chunk = [paragraph]
-                        current_length = len(paragraph)
+                        current_length = paragraph_length
                 else:
                     current_chunk.append(paragraph)
-                    current_length += len(paragraph) + 2  # +2 for paragraph separator
+                    current_length += paragraph_length + 2  # +2 for paragraph separator
 
-            # Add any remaining content in the current chunk
+            # Add remaining content
             if current_chunk:
                 chunk_text = "\n\n".join(current_chunk)
                 chunks.append(chunk_text)
 
-        logger.info(f"Created total of {len(chunks)} chunks")
+        logger.info(f"Split document into {len(chunks)} chunks")
+        for idx, chunk in enumerate(chunks):
+            logger.debug(f"Chunk {idx + 1}: {len(chunk)} characters")
+
         return chunks
 
     def process_document(
