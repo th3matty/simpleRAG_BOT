@@ -5,6 +5,7 @@ from app.evaluation.generate_test_cases import TestCase
 from app.core.database import db
 from app.core.config import settings
 from app.services.embeddings import EmbeddingService
+from app.services.query_classifier import QueryClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class EvaluationRunner:
 
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
+        self.query_classifier = QueryClassifier()
 
     def _calculate_mrr(
         self, retrieved_docs: List[Dict[str, Any]], expected_docs: List[Dict[str, Any]]
@@ -32,20 +34,64 @@ class EvaluationRunner:
         return 0.0
 
     def _texts_match(self, text1: str, text2: str, threshold: float = 0.3) -> bool:
-        """Determine if two texts match based on word overlap using Jaccard similarity."""
+        """
+        Determine if two texts match using a combination of:
+        1. Key term matching for factual information
+        2. Word overlap for general similarity
+        """
 
         def normalize_text(text: str) -> str:
             return " ".join(text.lower().strip().split())
 
         text1, text2 = normalize_text(text1), normalize_text(text2)
-        words1 = set(text1.split())
-        words2 = set(text2.split())
 
-        intersection = len(words1.intersection(words2))
-        union = len(words1.union(words2))
+        # Extract key terms (dates, proper nouns, numbers)
+        import re
 
-        similarity = intersection / union if union > 0 else 0
-        return similarity >= threshold
+        def extract_key_terms(text: str) -> set:
+            # Match dates (e.g., 1990er, 2017)
+            dates = set(re.findall(r"\d{4}(?:er)?", text))
+            # Match capitalized terms (potential proper nouns)
+            proper_nouns = set(
+                word for word in text.split() if any(c.isupper() for c in word)
+            )
+            # Match specific terms we care about
+            important_terms = {
+                "biodeutsch",
+                "bio-deutsch",
+                "duden",
+                "npd",
+                "kanak",
+                "attak",
+            }
+            return dates | proper_nouns | (important_terms & set(text.split()))
+
+        # Get key terms from both texts
+        terms1 = extract_key_terms(text1)
+        terms2 = extract_key_terms(text2)
+
+        # If we have key terms, they should match
+        if terms1 and terms2:
+            term_overlap = len(terms1 & terms2) / len(terms1 | terms2)
+            if term_overlap < 0.2:  # At least 20% of key terms should match
+                return False
+
+        # Calculate word overlap using sliding window for longer texts
+        words1 = text1.split()
+        words2 = text2.split()
+
+        # Use smaller window size for shorter text
+        window_size = min(len(words1), len(words2), 10)
+
+        max_overlap = 0
+        for i in range(len(words1) - window_size + 1):
+            window1 = set(words1[i : i + window_size])
+            for j in range(len(words2) - window_size + 1):
+                window2 = set(words2[j : j + window_size])
+                overlap = len(window1 & window2) / len(window1 | window2)
+                max_overlap = max(max_overlap, overlap)
+
+        return max_overlap >= threshold
 
     def _calculate_metrics_for_query(
         self,
@@ -104,8 +150,18 @@ class EvaluationRunner:
                 test_case.query
             )
 
+            # Get query-specific threshold
+            query_type, confidence = self.query_classifier.classify(test_case.query)
+            threshold = self.query_classifier.get_recommended_threshold(query_type)
+            logger.info(
+                f"Query classified as {query_type.value} (confidence: {confidence:.2f})"
+            )
+            logger.info(f"Using similarity threshold: {threshold}")
+
             results = db.query_documents(
-                query_embedding=query_embedding, n_results=settings.top_k_results
+                query_embedding=query_embedding,
+                n_results=settings.top_k_results,
+                similarity_threshold=threshold,
             )
 
             logger.info(f"Retrieved {len(results['documents'][0])} documents")

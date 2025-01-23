@@ -62,6 +62,7 @@ class EvaluationResults:
         Group metrics by query type.
         Helps understand performance across different query categories.
         """
+        # Group metrics by query type
         metrics_by_type = {}
         for query, metrics in self.metrics_by_query.items():
             query_type = metrics.query_type
@@ -77,11 +78,16 @@ class EvaluationResults:
             for key in ["precision", "recall", "f1_score", "mrr"]:
                 metrics_by_type[query_type][key].append(metrics_dict[key])
 
-        # Calculate averages for each type
+        # Calculate averages for each type, handling empty lists
         for query_type in metrics_by_type:
             for key in metrics_by_type[query_type]:
                 values = metrics_by_type[query_type][key]
-                metrics_by_type[query_type][key] = round(np.mean(values), 3)
+                if values:  # Only calculate mean if we have values
+                    metrics_by_type[query_type][key] = round(float(np.mean(values)), 3)
+                else:
+                    metrics_by_type[query_type][
+                        key
+                    ] = 0.0  # Default to 0 for empty lists
 
         return metrics_by_type
 

@@ -10,6 +10,7 @@ from .config import settings
 from ..services.calculator import Calculator
 from .database import db
 from ..services.embeddings import EmbeddingService
+from ..services.query_classifier import QueryClassifier, QueryType
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class ToolExecutor:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
         self.calculator = Calculator()
+        self.query_classifier = QueryClassifier()
 
     def execute_tool(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
         """
@@ -90,8 +92,18 @@ class ToolExecutor:
             # Generate embedding for the query
             query_embedding = self.embedding_service.get_single_embedding(query)
 
-            # Search for documents
-            results = db.query_documents(query_embedding=query_embedding)
+            # Classify query and get appropriate threshold
+            query_type, confidence = self.query_classifier.classify(query)
+            threshold = self.query_classifier.get_recommended_threshold(query_type)
+            logger.info(
+                f"Query classified as {query_type.value} (confidence: {confidence:.2f})"
+            )
+            logger.info(f"Using similarity threshold: {threshold}")
+
+            # Search for documents with query-specific threshold
+            results = db.query_documents(
+                query_embedding=query_embedding, similarity_threshold=threshold
+            )
 
             # Check if we have any results
             if not results["documents"] or not results["documents"][0]:
