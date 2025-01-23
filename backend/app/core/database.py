@@ -19,7 +19,10 @@ class ChromaDB:
         return self._collection
 
     def query_documents(
-        self, query_embedding: List[float], n_results: int = None
+        self,
+        query_embedding: List[float],
+        n_results: int = None,
+        similarity_threshold: float = None,
     ) -> Dict[str, Any]:
         """
         Query documents using embedding vector with similarity threshold filtering.
@@ -27,6 +30,7 @@ class ChromaDB:
         Args:
             query_embedding: The query embedding vector
             n_results: Number of results to return (defaults to settings.top_k_results)
+            similarity_threshold: Minimum similarity score for results (defaults to settings.similarity_threshold)
 
         Returns:
             Dictionary containing documents, metadata, and distances
@@ -36,41 +40,49 @@ class ChromaDB:
         """
         try:
             n_results = n_results or settings.top_k_results
-            logger.debug(
-                f"Querying documents with threshold {settings.similarity_threshold}"
-            )
+            threshold = similarity_threshold or settings.similarity_threshold
+            logger.debug(f"Querying documents with threshold {threshold}")
 
-            # Query for top results and filter by similarity threshold later if needed
+            # Get more initial results to ensure we don't miss relevant matches
+            expanded_n = min(n_results * 5, 30)  # Get up to 5x results, max 30
             results = self.collection.query(
                 query_embeddings=[query_embedding],
-                n_results=n_results,
+                n_results=expanded_n,
             )
 
-            # Filter results by similarity threshold if we have any results
+            # Filter results by similarity threshold and limit to n_results
             if results["documents"] and results["documents"][0]:
-                # Initialize lists for filtered results
                 filtered_docs = []
                 filtered_meta = []
                 filtered_dist = []
                 filtered_ids = []
 
                 for i, distance in enumerate(results["distances"][0]):
-                    # Convert distance to similarity (ChromaDB uses cosine distance)
+                    # Convert distance to similarity score (0-1 range)
                     similarity = (2 - distance) / 2
-                    if similarity >= settings.similarity_threshold:
+
+                    # For factual queries, also consider relative threshold
+                    # Keep results that are within 20% of the best match
+                    best_similarity = (2 - results["distances"][0][0]) / 2
+                    relative_threshold = max(threshold, best_similarity * 0.8)
+
+                    if similarity >= relative_threshold:
                         filtered_docs.append(results["documents"][0][i])
                         filtered_meta.append(results["metadatas"][0][i])
                         filtered_dist.append(distance)
                         filtered_ids.append(results["ids"][0][i])
 
-                # If we have filtered results, update results with filtered data
-                if filtered_docs:
-                    results = {
-                        "documents": [filtered_docs],
-                        "metadatas": [filtered_meta],
-                        "distances": [filtered_dist],
-                        "ids": [filtered_ids],
-                    }
+                        # Stop if we have enough results
+                        if len(filtered_docs) >= n_results:
+                            break
+
+                # Update results with filtered data
+                results = {
+                    "documents": [filtered_docs],
+                    "metadatas": [filtered_meta],
+                    "distances": [filtered_dist],
+                    "ids": [filtered_ids],
+                }
 
             return results
         except Exception as e:
