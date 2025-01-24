@@ -14,18 +14,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class SemanticChunker(BaseChunker):
+class AdaptiveChunker(BaseChunker):
     """
-    Adapter class that implements our semantic chunking strategy
+    Adapter class that implements our adaptive chunking strategy
     for the external evaluation framework.
     """
 
-    def __init__(self, max_chunk_size: int = 800, chunk_overlap: int = 200):
-        self.max_chunk_size = max_chunk_size
-        self.chunk_overlap = chunk_overlap
+    def __init__(
+        self,
+        max_size: int = 1200,
+        min_size: int = 400,
+        overlap: int = 200,
+    ):
+        self.max_size = max_size
+        self.min_size = min_size
+        self.overlap = overlap
         logger.info(
-            f"Initialized SemanticChunker with max_chunk_size={max_chunk_size}, "
-            f"overlap={chunk_overlap}"
+            f"Initialized AdaptiveChunker with max_size={max_size}, "
+            f"min_size={min_size}, overlap={overlap}"
         )
 
     def _split_into_sections(self, text: str) -> List[str]:
@@ -36,88 +42,58 @@ class SemanticChunker(BaseChunker):
     def split_text(self, text: str) -> List[str]:
         """
         Implement the required interface method for the evaluation framework.
-        Uses our semantic chunking strategy.
+        Uses our adaptive chunking strategy.
         """
-        chunks = []
-        sections = self._split_into_sections(text)
+        import sys
+        from pathlib import Path
 
-        for section_idx, section in enumerate(sections):
-            logger.debug(f"Processing section {section_idx + 1} of {len(sections)}")
+        # Add the project root to Python path
+        project_root = Path(__file__).parent.parent.parent
+        sys.path.append(str(project_root))
 
-            paragraphs = section.split("\n\n")
-            current_chunk = []
-            current_length = 0
+        from app.services.chunker import DocumentProcessor
+        from app.services.embeddings import EmbeddingService
 
-            for paragraph in paragraphs:
-                paragraph = paragraph.strip()
-                if not paragraph:
-                    continue
+        # Create a temporary embedding service for the chunker
+        embedding_service = EmbeddingService(model_name="all-MiniLM-L6-v2")
 
-                paragraph_length = len(paragraph)
+        # Initialize document processor with our settings
+        processor = DocumentProcessor(
+            embedding_service=embedding_service,
+            max_chunk_size=self.max_size,
+            chunk_overlap=self.overlap,
+        )
 
-                # If this paragraph would exceed the chunk size
-                if current_length + paragraph_length > self.max_chunk_size:
-                    if current_chunk:
-                        # Save current chunk
-                        chunk_text = "\n\n".join(current_chunk)
-                        chunks.append(chunk_text)
+        # Process the document and extract chunks
+        processed_chunks = processor.process_document(text, {"source": "evaluation"})
+        chunks = [chunk.content for chunk in processed_chunks]
 
-                        # Keep overlap from the end of previous chunk
-                        overlap_text = chunk_text[-self.chunk_overlap :]
-                        current_chunk = [overlap_text]
-                        current_length = len(overlap_text)
-
-                    # Handle large paragraphs
-                    if paragraph_length > self.max_chunk_size:
-                        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
-                        sentence_chunk = []
-                        sentence_length = 0
-
-                        for sentence in sentences:
-                            if sentence_length + len(sentence) > self.max_chunk_size:
-                                if sentence_chunk:
-                                    chunks.append(" ".join(sentence_chunk))
-
-                                    # Keep last sentence for overlap
-                                    sentence_chunk = [sentence_chunk[-1], sentence]
-                                    sentence_length = sum(
-                                        len(s) for s in sentence_chunk
-                                    )
-                            else:
-                                sentence_chunk.append(sentence)
-                                sentence_length += len(sentence) + 1
-
-                        if sentence_chunk:
-                            chunks.append(" ".join(sentence_chunk))
-                    else:
-                        current_chunk = [paragraph]
-                        current_length = paragraph_length
-                else:
-                    current_chunk.append(paragraph)
-                    current_length += paragraph_length + 2  # +2 for paragraph separator
-
-            # Add remaining content
-            if current_chunk:
-                chunk_text = "\n\n".join(current_chunk)
-                chunks.append(chunk_text)
-
-        logger.info(f"Created {len(chunks)} chunks")
         return chunks
 
 
 def main():
-    """Run the evaluation with different chunk sizes and overlaps."""
+    """Run the evaluation with different adaptive configurations."""
     # Test configurations
     configs = [
-        {"size": 800, "overlap": 200},  # Our default configuration
-        # {"size": 1000, "overlap": 200},  # Larger chunks
-        # {"size": 600, "overlap": 150},  # Smaller chunks
+        {
+            "max_size": 1200,
+            "min_size": 400,
+            "overlap": 200,
+        },  # Default adaptive
+        # {
+        #     "max_size": 1500,
+        #     "min_size": 500,
+        #     "overlap": 250,
+        # },  # Larger chunks
+        # {
+        #     "max_size": 900,
+        #     "min_size": 300,
+        #     "overlap": 150,
+        # },  # Smaller chunks
     ]
 
-    # Initialize evaluation
+    # Initialize evaluation and embedding function
     evaluation = GeneralEvaluation()
-
-    # Use sentence-transformers for embeddings (matches our production setup)
     embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
         model_name="all-MiniLM-L6-v2"
     )
@@ -125,18 +101,24 @@ def main():
     # Run evaluation for each configuration
     results = {}
     for config in configs:
-        chunker = SemanticChunker(
-            max_chunk_size=config["size"], chunk_overlap=config["overlap"]
+        chunker = AdaptiveChunker(
+            max_size=config["max_size"],
+            min_size=config["min_size"],
+            overlap=config["overlap"],
         )
 
         logger.info(
-            f"\nEvaluating configuration: chunk_size={config['size']}, "
-            f"overlap={config['overlap']}"
+            f"\nEvaluating configuration: max_size={config['max_size']}, "
+            f"min_size={config['min_size']}, overlap={config['overlap']}"
         )
 
         try:
             result = evaluation.run(chunker, embedding_function)
-            results[f"size_{config['size']}_overlap_{config['overlap']}"] = result
+            config_name = (
+                f"max_{config['max_size']}_min_{config['min_size']}_"
+                f"overlap_{config['overlap']}"
+            )
+            results[config_name] = result
 
             logger.info("Results:")
             logger.info(f"IOU Mean: {result['iou_mean']:.4f}")
@@ -147,12 +129,14 @@ def main():
         except Exception as e:
             logger.error(f"Error evaluating configuration: {str(e)}")
 
-    # Print comparative results
+    # Print comparative results with more detail
     logger.info("\nComparative Results:")
     for config_name, result in results.items():
         logger.info(f"\n{config_name}:")
         logger.info(f"IOU Mean: {result['iou_mean']:.4f}")
+        logger.info(f"IOU Std: {result['iou_std']:.4f}")
         logger.info(f"Recall Mean: {result['recall_mean']:.4f}")
+        logger.info(f"Recall Std: {result['recall_std']:.4f}")
 
 
 if __name__ == "__main__":
