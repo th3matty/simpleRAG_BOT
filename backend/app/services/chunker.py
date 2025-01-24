@@ -18,14 +18,40 @@ class ProcessedChunk:
     embedding: Optional[List[float]]
     metadata: Dict[str, Any]
     similarity_score: float = 0.0
+    parent_chunk_id: Optional[str] = None
+    child_chunk_ids: List[str] = None
+
+    def __post_init__(self):
+        if self.child_chunk_ids is None:
+            self.child_chunk_ids = []
 
 
 class DocumentProcessor:
     """
-    Handles document processing with an intelligent chunking strategy.
-    This processor focuses on maintaining document structure and context
-    while creating appropriately sized chunks.
+    Handles document processing with an adaptive chunking strategy.
+    Adjusts chunk sizes based on content structure while maintaining efficiency.
     """
+
+    # Chunk size limits
+    MAX_CHUNK_SIZE = 1200  # Maximum characters per chunk
+    MIN_CHUNK_SIZE = 400  # Minimum characters per chunk
+    OVERLAP_SIZE = 200  # Overlap size in characters
+
+    # Content structure patterns
+    HEADER_PATTERNS = [
+        r"^#{1,6}\s+.+$",  # Markdown headers
+        r"^[A-Z][^\n]+\n[=\-]{2,}$",  # Underlined headers
+    ]
+
+    LIST_PATTERNS = [
+        r"^\s*[-*+]\s+.+$",  # Unordered lists
+        r"^\s*\d+\.\s+.+$",  # Ordered lists
+    ]
+
+    CODE_BLOCK_PATTERNS = [
+        r"```[\s\S]*?```",  # Fenced code blocks
+        r"(?:(?:^|\n)\s{4}[^\n]+)+",  # Indented code blocks
+    ]
 
     def __init__(
         self, embedding_service, max_chunk_size: int = 800, chunk_overlap: int = 200
@@ -48,173 +74,207 @@ class DocumentProcessor:
         """Generate embedding for a piece of text."""
         return self.embedding_service.get_single_embedding(text)
 
+    def _identify_content_structure(self, text: str) -> Dict[str, List[tuple]]:
+        """
+        Identify different content structures in the text and their positions.
+
+        Returns:
+            Dictionary mapping structure types to lists of (start, end) positions
+        """
+        structures = {"headers": [], "lists": [], "code_blocks": [], "paragraphs": []}
+
+        # Find headers
+        for pattern in self.HEADER_PATTERNS:
+            for match in re.finditer(pattern, text, re.MULTILINE):
+                structures["headers"].append((match.start(), match.end()))
+
+        # Find lists
+        list_items = []
+        for pattern in self.LIST_PATTERNS:
+            for match in re.finditer(pattern, text, re.MULTILINE):
+                list_items.append((match.start(), match.end()))
+        # Group adjacent list items
+        if list_items:
+            list_start = list_items[0][0]
+            prev_end = list_items[0][1]
+            for start, end in list_items[1:]:
+                if start - prev_end > 2:  # New list if gap > 2 lines
+                    structures["lists"].append((list_start, prev_end))
+                    list_start = start
+                prev_end = end
+            structures["lists"].append((list_start, prev_end))
+
+        # Find code blocks
+        for pattern in self.CODE_BLOCK_PATTERNS:
+            for match in re.finditer(pattern, text):
+                structures["code_blocks"].append((match.start(), match.end()))
+
+        # Find paragraphs (text between blank lines, excluding other structures)
+        paragraph_pattern = r"(?:^|\n\n)((?:[^\n]+\n?)+)(?=\n\n|$)"
+        for match in re.finditer(paragraph_pattern, text):
+            # Check if this region overlaps with other structures
+            start, end = match.start(1), match.end(1)
+            is_special = False
+            for struct_type in ["headers", "lists", "code_blocks"]:
+                for s_start, s_end in structures[struct_type]:
+                    if start <= s_end and end >= s_start:
+                        is_special = True
+                        break
+                if is_special:
+                    break
+            if not is_special:
+                structures["paragraphs"].append((start, end))
+
+        return structures
+
     def _split_into_sections(self, text: str) -> List[str]:
-        """Split text into sections by natural breaks."""
-        # No longer split by markdown headers
-        sections = text.split("\n\n")  # Split by paragraph breaks
+        """
+        Split text into sections by natural breaks, respecting content structure.
+        """
+        # Identify all content structures
+        structures = self._identify_content_structure(text)
+
+        # Combine all break points
+        break_points = []
+        for struct_type, positions in structures.items():
+            for start, end in positions:
+                break_points.extend(
+                    [(start, "start", struct_type), (end, "end", struct_type)]
+                )
+
+        # Sort break points by position
+        break_points.sort(key=lambda x: x[0])
+
+        # Create sections based on structure boundaries
+        sections = []
+        current_start = 0
+
+        for pos, point_type, struct_type in break_points:
+            if point_type == "start":
+                # If there's text before this structure, add it as a section
+                if pos > current_start:
+                    section_text = text[current_start:pos].strip()
+                    if section_text:
+                        sections.append(section_text)
+                # Add the structure as its own section
+                next_end = next(
+                    (
+                        p[0]
+                        for p in break_points
+                        if p[0] > pos and p[1] == "end" and p[2] == struct_type
+                    ),
+                    len(text),
+                )
+                section_text = text[pos:next_end].strip()
+                if section_text:
+                    sections.append(section_text)
+                current_start = next_end
+
+        # Add any remaining text
+        if current_start < len(text):
+            section_text = text[current_start:].strip()
+            if section_text:
+                sections.append(section_text)
+
         logger.debug(f"Split document into {len(sections)} sections")
-        return [s for s in sections if s.strip()]  # Remove empty sections
+        return sections
 
-    # def _split_into_semantic_chunks(self, text: str) -> List[str]:
-    #     """
-    #     Split text into semantically meaningful chunks while respecting size limits.
-    #     This method tries to keep related content together while ensuring chunks
-    #     aren't too large.
-    #     """
-    #     # First split by major sections (headers)
-    #     sections = self._split_into_sections(text)
+    def _estimate_chunk_size(self, section: str) -> int:
+        """
+        Estimate appropriate chunk size based on content structure.
+        Returns a size between MIN_CHUNK_SIZE and MAX_CHUNK_SIZE.
+        """
+        # Check for structural indicators
+        has_headers = any(
+            re.search(pattern, section, re.MULTILINE)
+            for pattern in self.HEADER_PATTERNS
+        )
+        has_lists = any(
+            re.search(pattern, section, re.MULTILINE) for pattern in self.LIST_PATTERNS
+        )
+        has_code = any(
+            re.search(pattern, section) for pattern in self.CODE_BLOCK_PATTERNS
+        )
 
-    #     chunks = []
-    #     for section_idx, section in enumerate(sections):
-    #         logger.debug(f"Processing section {section_idx}")
+        # Start with base size
+        size = (self.MAX_CHUNK_SIZE + self.MIN_CHUNK_SIZE) // 2
 
-    #         current_chunk = []
-    #         current_length = 0
+        # Adjust based on content structure
+        if has_headers:
+            size = max(
+                size - 200, self.MIN_CHUNK_SIZE
+            )  # Smaller chunks for structured content
+        if has_lists or has_code:
+            size = max(
+                size - 100, self.MIN_CHUNK_SIZE
+            )  # Slightly smaller for lists/code
+        if not (has_headers or has_lists or has_code):
+            size = min(size + 200, self.MAX_CHUNK_SIZE)  # Larger for prose
 
-    #         # Split section into paragraphs
-    #         paragraphs = section.split("\n\n")
-
-    #         for para_idx, paragraph in enumerate(paragraphs):
-    #             paragraph = paragraph.strip()
-    #             if not paragraph:
-    #                 continue
-
-    #             logger.debug(
-    #                 f"Processing paragraph {para_idx} in section {section_idx}"
-    #             )
-    #             logger.debug(f"Paragraph length: {len(paragraph)}")
-
-    #             # If adding this paragraph would exceed max size
-    #             if current_length + len(paragraph) > self.max_chunk_size:
-    #                 # Save current chunk if it exists
-    #                 if current_chunk:
-    #                     chunk_text = "\n\n".join(current_chunk)
-    #                     chunks.append(chunk_text)
-    #                     # Create overlap by keeping some of the previous content
-    #                     overlap_text = chunk_text[-self.chunk_overlap :]
-    #                     current_chunk = [overlap_text]
-    #                     current_length = len(overlap_text)
-
-    #                 # Handle paragraphs that are themselves too long
-    #                 if len(paragraph) > self.max_chunk_size:
-    #                     logger.debug("Processing oversized paragraph")
-    #                     # Split by sentences
-    #                     sentences = re.split(r"(?<=[.!?])\s+", paragraph)
-    #                     temp_chunk = []
-    #                     temp_length = 0
-
-    #                     for sentence in enumerate(sentences):
-    #                         if temp_length + len(sentence) > self.max_chunk_size:
-    #                             if temp_chunk:
-    #                                 chunk_text = " ".join(temp_chunk)
-    #                                 chunks.append(chunk_text)
-
-    #                                 # Create sentence-level overlap
-    #                                 last_sentences = " ".join(
-    #                                     temp_chunk[-2:]
-    #                                 )  # Keep last 2 sentences
-    #                                 temp_chunk = [last_sentences]
-    #                                 temp_length = len(last_sentences)
-
-    #                             temp_chunk = [sentence]
-    #                             temp_length = len(sentence)
-    #                         else:
-    #                             temp_chunk.append(sentence)
-    #                             temp_length += len(sentence) + 1  # +1 for space
-
-    #                     if temp_chunk:
-    #                         chunk_text = " ".join(temp_chunk)
-    #                         chunks.append(chunk_text)
-
-    #                 else:
-    #                     current_chunk = [paragraph]
-    #                     current_length = len(paragraph)
-    #             else:
-    #                 current_chunk.append(paragraph)
-    #                 current_length += len(paragraph) + 2  # +2 for paragraph separator
-
-    #         # Add any remaining content in the current chunk
-    #         if current_chunk:
-    #             chunk_text = "\n\n".join(current_chunk)
-    #             chunks.append(chunk_text)
-
-    #     logger.info(f"Created total of {len(chunks)} chunks")
-    #     return chunks
-
-    # app/services/chunker.py
+        return size
 
     def _split_into_semantic_chunks(self, text: str) -> List[str]:
         """
-        Split text into semantically meaningful chunks with consistent overlap.
+        Split text into chunks with adaptive sizing based on content structure.
+        Uses lightweight heuristics for better performance.
         """
         sections = self._split_into_sections(text)
         chunks = []
+        current_chunk = []
+        current_length = 0
 
-        for section_idx, section in enumerate(sections):
-            logger.debug(f"Processing section {section_idx + 1} of {len(sections)}")
+        for section in sections:
+            section = section.strip()
+            if not section:
+                continue
 
-            paragraphs = section.split("\n\n")
-            current_chunk = []
-            current_length = 0
+            # Quick check for natural break points
+            has_break = bool(re.search(r"\n\n|\.\s+[A-Z]", section))
+            target_size = self.MAX_CHUNK_SIZE if not has_break else self.MIN_CHUNK_SIZE
 
-            for para_idx, paragraph in enumerate(paragraphs):
-                paragraph = paragraph.strip()
-                if not paragraph:
-                    continue
+            # If section would exceed target size
+            if current_length + len(section) > target_size:
+                if current_chunk:
+                    chunks.append("\n\n".join(current_chunk))
 
-                paragraph_length = len(paragraph)
+                # Split large sections by sentences
+                if len(section) > target_size:
+                    sentences = re.split(r"(?<=[.!?])\s+", section)
+                    temp_chunk = []
+                    temp_length = 0
 
-                # If this paragraph would exceed the chunk size
-                if current_length + paragraph_length > self.max_chunk_size:
-                    if current_chunk:
-                        # Save current chunk
-                        chunk_text = "\n\n".join(current_chunk)
-                        chunks.append(chunk_text)
-                        logger.debug(f"Created chunk of length {len(chunk_text)}")
+                    for sentence in sentences:
+                        if temp_length + len(sentence) > target_size:
+                            if temp_chunk:
+                                chunks.append(" ".join(temp_chunk))
+                                # Keep last sentence for minimal overlap
+                                temp_chunk = (
+                                    [temp_chunk[-1]] if len(temp_chunk) > 1 else []
+                                )
+                                temp_length = sum(len(s) + 1 for s in temp_chunk)
+                            temp_chunk.append(sentence)
+                            temp_length += len(sentence) + 1
+                        else:
+                            temp_chunk.append(sentence)
+                            temp_length += len(sentence) + 1
 
-                        # Keep overlap from the end of previous chunk
-                        overlap_text = chunk_text[-self.chunk_overlap :]
-                        current_chunk = [overlap_text]
-                        current_length = len(overlap_text)
-
-                    # Handle large paragraphs
-                    if paragraph_length > self.max_chunk_size:
-                        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
-                        sentence_chunk = []
-                        sentence_length = 0
-
-                        for sentence in sentences:
-                            if sentence_length + len(sentence) > self.max_chunk_size:
-                                if sentence_chunk:
-                                    chunks.append(" ".join(sentence_chunk))
-
-                                    # Keep last sentence for overlap
-                                    sentence_chunk = [sentence_chunk[-1], sentence]
-                                    sentence_length = sum(
-                                        len(s) for s in sentence_chunk
-                                    )
-                            else:
-                                sentence_chunk.append(sentence)
-                                sentence_length += len(sentence) + 1
-
-                        if sentence_chunk:
-                            chunks.append(" ".join(sentence_chunk))
-                    else:
-                        current_chunk = [paragraph]
-                        current_length = paragraph_length
+                    if temp_chunk:
+                        chunks.append(" ".join(temp_chunk))
                 else:
-                    current_chunk.append(paragraph)
-                    current_length += paragraph_length + 2  # +2 for paragraph separator
+                    chunks.append(section)
 
-            # Add remaining content
-            if current_chunk:
-                chunk_text = "\n\n".join(current_chunk)
-                chunks.append(chunk_text)
+                current_chunk = []
+                current_length = 0
+            else:
+                current_chunk.append(section)
+                current_length += len(section)
+
+        # Add remaining content
+        if current_chunk:
+            chunk_text = "\n\n".join(current_chunk)
+            chunks.append(chunk_text)
 
         logger.info(f"Split document into {len(chunks)} chunks")
-        for idx, chunk in enumerate(chunks):
-            logger.debug(f"Chunk {idx + 1}: {len(chunk)} characters")
-
         return chunks
 
     def process_document(
@@ -222,7 +282,7 @@ class DocumentProcessor:
     ) -> List[ProcessedChunk]:
         """
         Process a document into chunks with embeddings and metadata.
-        This is the main method that coordinates the entire document processing pipeline.
+        Uses adaptive chunk sizing based on content structure.
         """
         try:
             doc_id = f"doc_{int(time.time())}_{metadata.get('source', 'unknown')}"
@@ -237,10 +297,6 @@ class DocumentProcessor:
             processed_chunks = []
             for idx, chunk in enumerate(chunks):
                 try:
-                    logger.debug(f"Processing chunk {idx}")
-                    logger.debug(f"Chunk {idx} length: {len(chunk)}")
-                    logger.debug(f"Chunk {idx} preview: {chunk[:100]}...")
-
                     # Generate embedding
                     embedding = self._get_embedding(chunk)
 
@@ -250,7 +306,7 @@ class DocumentProcessor:
                         {
                             "chunk_index": idx,
                             "total_chunks": len(chunks),
-                            "parent_id": doc_id,
+                            "doc_id": doc_id,
                             "chunk_length": len(chunk),
                         }
                     )
