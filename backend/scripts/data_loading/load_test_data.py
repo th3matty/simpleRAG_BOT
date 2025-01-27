@@ -90,7 +90,7 @@ def load_test_documents():
                 documents=[chunk.content for chunk in all_chunks],
                 metadatas=[chunk.metadata for chunk in all_chunks],
                 ids=[
-                    f"{chunk.metadata['parent_id']}_{chunk.metadata['chunk_index']}"
+                    f"{chunk.metadata['doc_id']}_{chunk.metadata['chunk_index']}"
                     for chunk in all_chunks
                 ],
             )
