@@ -9,7 +9,11 @@ from .model_document import (
     DocumentInput,
 )
 from .model_requests import DocumentUploadRequest, FileUploadRequest, FileUploadMetadata
-from .model_responses import DocumentListResponse, DocumentUploadResponse
+from .model_responses import (
+    DocumentListResponse,
+    DocumentUploadResponse,
+    DocumentDeleteResponse,
+)
 
 __all__ = [
     "ChatRequest",
@@ -25,4 +29,5 @@ __all__ = [
     "FileUploadMetadata",
     "DocumentListResponse",
     "DocumentUploadResponse",
+    "DocumentDeleteResponse",
 ]

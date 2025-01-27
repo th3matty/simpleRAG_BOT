@@ -2,7 +2,6 @@ from fastapi import APIRouter, Form, HTTPException, Depends, UploadFile, File
 from typing import Optional
 import datetime
 import logging
-import chromadb
 
 from ..services.document_ingestion import DocumentIngestionService
 
@@ -12,7 +11,7 @@ from ..services.embeddings import EmbeddingService
 from ..core.tools import ToolExecutor
 from ..core.database import db
 from ..core.config import settings
-from ..core.exceptions import DatabaseError, RAGException
+from ..core.exceptions import RAGException
 from ..models import (
     ChatRequest,
     DocumentSource,
@@ -21,6 +20,7 @@ from ..models import (
     DocumentUploadResponse,
     DocumentChunk,
     DocumentComplete,
+    DocumentDeleteResponse,
 )
 
 from collections import defaultdict
@@ -436,4 +436,55 @@ async def update_file_document(
             raise
         raise HTTPException(
             status_code=500, detail=f"Failed to update document: {str(e)}"
+        )
+
+
+@router.delete("/documents/source/{source}", response_model=DocumentDeleteResponse)
+async def delete_documents_by_source(source: str):
+    """
+    Delete all documents from a specific source in the database.
+
+    Args:
+        source: Source/filename to delete documents from (e.g., 'article1.md')
+
+    Returns:
+        DocumentDeleteResponse containing deletion details
+    """
+    try:
+        logger.info(f"Deleting documents for source: {source}")
+
+        # Get all documents with the specified source
+        results = db.collection.get(include=["metadatas"], where={"source": source})
+
+        if not results or not results["ids"]:
+            logger.info(f"No documents found for source: {source}")
+            return DocumentDeleteResponse(
+                message=f"No documents found for source: {source}",
+                deleted_count=0,
+                source=source,
+            )
+
+        # Delete all documents with the specified source
+        db.collection.delete(ids=results["ids"])
+
+        deletion_count = len(results["ids"])
+        logger.info(
+            f"Successfully deleted {deletion_count} documents from source: {source}"
+        )
+
+        return DocumentDeleteResponse(
+            message=f"Successfully deleted {deletion_count} documents from source: {source}",
+            deleted_count=deletion_count,
+            source=source,
+            metadata={
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "deleted_ids": results["ids"],
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error deleting documents: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete documents from source {source}: {str(e)}",
         )

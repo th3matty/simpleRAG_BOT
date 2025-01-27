@@ -17,3 +17,12 @@ class DocumentUploadResponse(BaseModel):
     metadata: Dict[str, Any] = Field(
         ..., description="Response metadata including token usage"
     )
+
+
+class DocumentDeleteResponse(BaseModel):
+    message: str = Field(..., description="Status message about the deletion operation")
+    deleted_count: int = Field(..., description="Number of documents deleted")
+    source: str = Field(..., description="Source from which documents were deleted")
+    metadata: Dict[str, Any] = Field(
+        default={}, description="Optional metadata about the deletion operation"
+    )
