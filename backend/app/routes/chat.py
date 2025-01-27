@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, HTTPException, Depends, UploadFile, File
 from typing import Optional
 import datetime
 import logging
+import chromadb
 
 from ..services.document_ingestion import DocumentIngestionService
 
@@ -141,6 +142,108 @@ async def chat(
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/documents/source/{source}", response_model=DocumentListResponse)
+async def get_documents_by_source(source: str):
+    """
+    Retrieve all documents from a specific source in the database.
+    This endpoint reassembles chunked documents into their complete form while
+    maintaining chunk relationships and metadata.
+
+    Args:
+        source: Source/filename to filter documents by (e.g., 'article1.md')
+
+    Returns:
+        DocumentListResponse containing organized documents and their chunks
+    """
+    try:
+        logger.info(f"Retrieving documents for source: {source}")
+        logger.debug(f"Using ChromaDB directory: {settings.chroma_persist_directory}")
+
+        # Get documents from the default collection with source filter
+        try:
+            results = db.collection.get(
+                include=["documents", "metadatas", "embeddings"],
+                where={"source": source},
+            )
+            logger.debug(f"Raw database results: {results}")
+        except Exception as e:
+            logger.error(f"Error retrieving documents: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Error retrieving documents: {str(e)}"
+            )
+
+        if not results or not results["documents"]:
+            logger.info(f"No documents found in collection: {source}")
+            return DocumentListResponse(count=0, documents=[])
+
+        # Group chunks by their parent document ID
+        document_chunks = defaultdict(list)
+
+        # Process each chunk and organize by parent document
+        for doc, meta, embedding, doc_id in zip(
+            results["documents"],
+            results["metadatas"],
+            results["embeddings"],
+            results["ids"],
+        ):
+            # Extract parent_id from metadata
+            parent_id = meta.get("parent_id")
+            if not parent_id:
+                logger.warning(f"Chunk {doc_id} has no parent_id, skipping")
+                continue
+
+            # Create chunk info
+            chunk = DocumentChunk(
+                content=doc,
+                chunk_index=meta.get("chunk_index", 0),
+                metadata={
+                    k: v
+                    for k, v in meta.items()
+                    if k not in ["parent_id", "chunk_index"]
+                },
+                embedding=embedding.tolist() if embedding is not None else None,
+            )
+
+            document_chunks[parent_id].append(chunk)
+
+        # Organize chunks into complete documents
+        documents = []
+        for parent_id, chunks in document_chunks.items():
+            # Sort chunks by their index
+            sorted_chunks = sorted(chunks, key=lambda x: x.chunk_index)
+
+            # Get document-level metadata from first chunk
+            first_chunk = sorted_chunks[0]
+            doc_metadata = first_chunk.metadata.copy()
+
+            # Create document with its chunks
+            document = DocumentComplete(
+                document_id=parent_id,
+                title=doc_metadata.get("title"),
+                source=doc_metadata.get("source", "unknown"),
+                chunks=sorted_chunks,
+                metadata={
+                    "timestamp": doc_metadata.get("timestamp"),
+                    "tags": doc_metadata.get("tags", []),
+                    "total_chunks": len(sorted_chunks),
+                    "file_type": doc_metadata.get("file_type"),
+                },
+            )
+            documents.append(document)
+
+        logger.info(f"Retrieved {len(documents)} documents for source: {source}")
+
+        return DocumentListResponse(count=len(documents), documents=documents)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error retrieving documents from collection: {str(e)}", exc_info=True
+        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve documents")
 
 
 @router.get("/documents", response_model=DocumentListResponse)
