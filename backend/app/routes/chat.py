@@ -488,3 +488,50 @@ async def delete_documents_by_source(source: str):
             status_code=500,
             detail=f"Failed to delete documents from source {source}: {str(e)}",
         )
+
+
+@router.delete("/documents/collection", response_model=DocumentDeleteResponse)
+async def delete_collection():
+    """
+    Delete all documents from the collection.
+    This is a destructive operation and cannot be undone.
+
+    Returns:
+        DocumentDeleteResponse containing deletion details
+    """
+    try:
+        logger.info("Deleting all documents from collection")
+
+        # Get all document IDs first to include in response
+        results = db.collection.get(include=["metadatas"])
+
+        if not results or not results["ids"]:
+            logger.info("No documents found in collection")
+            return DocumentDeleteResponse(
+                message="No documents found in collection",
+                deleted_count=0,
+                source="all",
+            )
+
+        # Delete all documents by matching any source
+        db.collection.delete(where={"source": {"$ne": ""}})
+
+        deletion_count = len(results["ids"])
+        logger.info(f"Successfully deleted {deletion_count} documents from collection")
+
+        return DocumentDeleteResponse(
+            message=f"Successfully deleted {deletion_count} documents from collection",
+            deleted_count=deletion_count,
+            source="all",
+            metadata={
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "deleted_ids": results["ids"],
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Error deleting collection: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete collection: {str(e)}",
+        )
