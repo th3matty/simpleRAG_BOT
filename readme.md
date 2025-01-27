@@ -82,9 +82,10 @@ backend/
 │       ├── article4.md
 │       └── test_formats/              # Test files for processors
 ├── docs/                              # Documentation
-│   ├── chunker.md
-│   ├── client-query.md
-│   └── document-upload.md
+│   ├── api-endpoints.md              # API endpoints reference
+│   ├── chunker.md                    # Chunking strategy documentation
+│   ├── client-query.md              # Client query guide
+│   └── document-upload.md           # Document upload process flowchart
 ├── scripts/
 │   ├── data_loading/                  # Data loading utilities
 │   │   └── load_test_data.py
