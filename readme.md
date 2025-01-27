@@ -227,21 +227,79 @@ Each processor test validates:
 
 Note: These tests only verify the processors' extraction capabilities. They do not load documents into the vector database. For loading documents into the database, use the data loading scripts in the `scripts/data_loading/` directory.
 
-### Evaluating Chunking
+### Document Chunking Strategy
 
-The system includes different scripts to evaluate chunking strategies. To run the evaluation:
+The system implements an adaptive semantic chunking strategy with the following features:
+
+- **Content-Aware Chunking**: Analyzes document structure to identify:
+  - Headers (Markdown and underlined)
+  - Lists (ordered and unordered)
+  - Code blocks (fenced and indented)
+  - Paragraphs
+- **Adaptive Sizing**:
+
+  - Maximum chunk size: 1200 characters
+  - Minimum chunk size: 400 characters
+  - Overlap size: 200 characters
+  - Dynamically adjusts chunk sizes based on content structure:
+    - Smaller chunks for structured content (headers, lists)
+    - Larger chunks for prose content
+    - Preserves natural breaks in text
+
+- **Semantic Preservation**:
+  - Maintains context by keeping related content together
+  - Respects document structure and natural boundaries
+  - Ensures coherent chunks for better retrieval
+
+### Chunking Evaluation System
+
+The system includes comprehensive evaluation tools for assessing chunking performance:
+
+#### Semantic Chunking Evaluation
+
+Run the semantic chunking evaluation:
 
 ```bash
 cd backend
-python scripts/evaluate_chunking.py
+python scripts/evaluation/evaluate_semantic_chunking.py
 ```
 
-The script will:
+This script:
 
-- Evaluate chunking performance using metrics:
-  - IOU (Intersection Over Union): How well chunks align with natural boundaries
-  - Recall: How much relevant information is preserved
-- Display detailed evaluation results
+- Uses an external evaluation framework (chunking_evaluation)
+- Compares our adaptive chunking with standardized metrics:
+  - IOU (Intersection Over Union): Measures chunk boundary alignment
+  - Recall: Evaluates information preservation
+  - Standard deviation: Assesses consistency
+
+#### Multiple Chunking Strategies
+
+The system includes evaluation scripts for different chunking approaches:
+
+- `evaluate_semantic_chunking.py`: Our adaptive semantic approach
+- `evaluate_cluster_chunking.py`: Clustering-based chunking
+- `evaluate_recursive_Langchain_char_chunking.py`: Langchain's recursive character chunking
+- `evaluate_sliding_chunking.py`: Simple sliding window approach
+
+Each script provides:
+
+- Performance metrics for the specific strategy
+- Comparative analysis with other methods
+- Configuration options for tuning parameters
+
+#### Evaluation Results
+
+The evaluation framework tests chunking strategies against:
+
+- Different document types and structures
+- Various content lengths
+- Multiple languages and formats
+
+Results help optimize:
+
+- Chunk size parameters
+- Overlap settings
+- Content-specific adjustments
 
 ## API Documentation
 

@@ -306,7 +306,8 @@ class DocumentProcessor:
                         {
                             "chunk_index": idx,
                             "total_chunks": len(chunks),
-                            "doc_id": doc_id,
+                            "parent_id": doc_id,
+                            "doc_id": doc_id,  # Keep doc_id for backward compatibility
                             "chunk_length": len(chunk),
                         }
                     )
