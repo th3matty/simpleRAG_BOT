@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
 subgraph routes_chat["routes/chat.py"]
 A["POST /chat"] -->|"chat()"| B["ChatRequest"]
@@ -34,3 +35,4 @@ end
     classDef default fill:#f9f,stroke:#333,stroke-width:2px
     classDef config fill:#fcf,stroke:#333,stroke-width:1px
     class L config
+```

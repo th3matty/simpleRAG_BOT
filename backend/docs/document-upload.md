@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
 subgraph "Document Upload Process"
 A[Client Request] -->|POST /documents/upload| B[FastAPI Endpoint]
@@ -27,3 +28,4 @@ B -->|Pass documents| C[EmbeddingService]
             )"| K[Persistent Storage]
         end
     end
+```

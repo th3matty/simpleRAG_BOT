@@ -23,7 +23,13 @@ A robust RAG system built with FastAPI, ChromaDB, and Anthropic's Claude for int
 9. [Development](#development)
    - [Adding New Tools](#adding-new-tools)
    - [Running Tests](#running-tests)
-10. [License](#license)
+10. [Evaluation Framework](#evaluation-framework)
+    - [Purpose](#purpose)
+    - [Components](#components)
+    - [Usage](#usage-1)
+    - [Interpreting Results](#interpreting-results)
+    - [Extending the Framework](#extending-the-framework)
+11. [License](#license)
 
 ## Features
 
@@ -356,6 +362,120 @@ The tool system is designed to be extensible. To add a new tool:
 ```bash
 pytest backend/tests/
 ```
+
+## Evaluation Framework
+
+The evaluation framework in `backend/app/evaluation/` provides a comprehensive system for assessing the RAG system's performance. This framework helps measure and optimize the system's ability to retrieve relevant information accurately.
+
+### Purpose
+
+The evaluation framework serves several key purposes:
+
+1. Validate the system's retrieval accuracy
+2. Measure performance across different query types
+3. Identify areas for improvement
+4. Ensure consistent performance as the system evolves
+
+### Components
+
+#### 1. Test Case Generation (`generate_test_cases.py`)
+
+- Creates standardized test cases from known content
+- Supports different query types:
+  - Definition queries
+  - Factual queries
+  - Context-based queries
+- Each test case includes:
+  - Query text
+  - Expected document content
+  - Query type classification
+  - Test description
+
+#### 2. Performance Metrics (`metrics.py`)
+
+Implements various metrics to evaluate retrieval quality:
+
+- **Precision**: Accuracy of retrieved documents
+- **Recall**: Completeness of relevant document retrieval
+- **F1 Score**: Balance between precision and recall
+- **MRR (Mean Reciprocal Rank)**: Position of first relevant document
+- **Relevance Scores**: Raw similarity measurements
+
+#### 3. Evaluation Runner (`runner.py`)
+
+Orchestrates the evaluation process:
+
+- Processes test cases through the retrieval system
+- Applies intelligent text matching algorithms
+- Calculates comprehensive metrics
+- Groups results by query type
+- Provides detailed performance analysis
+
+### Usage
+
+To run the evaluation framework:
+
+1. Ensure test documents are loaded:
+
+```bash
+cd backend
+python scripts/data_loading/load_test_data.py
+```
+
+2. Execute the evaluation:
+
+```bash
+cd backend/app
+python evaluation/run_evaluation.py
+```
+
+The evaluation will output:
+
+- Overall system metrics
+- Performance breakdown by query type
+- Detailed results for each test case
+- Logging information for debugging
+
+### Interpreting Results
+
+The evaluation results provide insights into:
+
+- Overall system performance (average precision, recall, F1)
+- Performance variations across query types
+- Areas needing improvement
+- Impact of system changes
+
+Example output:
+
+```
+Evaluation Results:
+==================
+Average Precision: 0.85
+Average Recall: 0.78
+Average F1: 0.81
+Average MRR: 0.90
+
+Metrics by Query Type:
+definition:
+  Precision: 0.92
+  Recall: 0.85
+  F1 Score: 0.88
+  MRR: 0.95
+
+factual:
+  Precision: 0.83
+  Recall: 0.76
+  F1 Score: 0.79
+  MRR: 0.88
+```
+
+### Extending the Framework
+
+To add new test cases:
+
+1. Modify `generate_test_cases.py`
+2. Add new test case types and examples
+3. Update metrics if needed for new evaluation criteria
 
 ## License
 
