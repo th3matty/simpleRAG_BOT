@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
 A[Start: Input Document Content and Metadata] --> B[Extract Title]
 B --> C{Markdown Header Present?}
@@ -26,3 +27,4 @@ T --> U[Create Metadata for Each Chunk]
 U --> V[Store Processed Chunks with Similarity Score]
 V --> W[Output Processed Chunks for Downstream Tasks]
 W --> X[End]
+```
