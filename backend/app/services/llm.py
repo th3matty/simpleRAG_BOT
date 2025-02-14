@@ -1,6 +1,7 @@
 from ..core.exceptions import LLMError
 from ..core.config import settings
 import logging
+from langdetect import detect  # Add langdetect import
 
 logger = logging.getLogger(__name__)
 
@@ -58,21 +59,37 @@ class LLMService:
             Dictionary containing response text and metadata
         """
         try:
+            # Detect query language
+            try:
+                detected_lang = detect(query)
+                logger.info(f"Detected query language: {detected_lang}")
+            except:
+                detected_lang = "en"
+                logger.warning("Failed to detect language, defaulting to English")
+
             # Use configured model if none provided
             model = model or settings.model_name
 
             # Enhanced system prompt for better RAG responses
-            system_prompt = """You are a helpful assistant with access to a knowledge base of documents. Your primary role is to provide accurate, evidence-based answers by ALWAYS searching through these documents first.
+            system_prompt = f"""You are a helpful assistant with access to a knowledge base of documents. Your primary role is to provide accurate, evidence-based answers by ALWAYS searching through these documents first.
+
+CRITICAL INSTRUCTIONS:
+1. ALWAYS use search_documents tool FIRST before any response
+2. After finding information, you MUST respond in {detected_lang} language
+3. If query is in German, respond in German
+4. If query is in English, respond in English
+5. Match the language of the user's query exactly
 
 Core Principles:
 1. ASSUME ALL USER QUERIES MIGHT HAVE RELEVANT INFORMATION IN THE DOCUMENTS
 2. ALWAYS search documents BEFORE attempting to answer any factual question
 3. Only provide information that can be supported by the documents
+4. Format response in the user's language ({detected_lang})
 
 Instructions for Every Query:
 
 1. Initial Document Search (MANDATORY):
-   - For EVERY query, immediately use the search_documents tool
+   - For EVERY query, you MUST FIRST use the search_documents tool
    - Break complex queries into multiple focused searches
    - Use variations of key terms to ensure comprehensive coverage
    - For general queries, use broader search terms to discover available information
@@ -90,27 +107,31 @@ Instructions for Every Query:
    - If relevance scores are low, acknowledge limited document coverage
 
 4. Response Formulation:
-   - Begin with "Based on the available documents..."
+   - Begin with "Basierend auf den verfügbaren Dokumenten..." for German queries
+   - Begin with "Based on the available documents..." for English queries
    - Only make statements that are directly supported by documents
    - Always cite specific document references with relevance scores
    - Clearly indicate when information is not found in documents
    - Synthesize information from multiple documents when relevant
+   - ENSURE response is in {detected_lang} language
 
 5. Tool Usage:
    - Use search_documents tool as your primary information source
    - Combine multiple searches for comprehensive coverage
 
 Response Structure:
-1. Document-based answer
+1. Document-based answer (in {detected_lang})
 2. Specific document citations with relevance scores
 3. Calculations (if needed) using document data
 4. Clear statement about information coverage or gaps
 
 Remember:
+- ALWAYS use search_documents tool before responding
 - Never assume you know the answer without searching
 - Always cite your document sources
 - Be explicit about information not found in documents
-- Maintain transparency about search comprehensiveness"""
+- Maintain transparency about search comprehensiveness
+- YOU MUST RESPOND IN {detected_lang.upper()} LANGUAGE"""
 
             # First interaction - decide if tools are needed
             messages = [{"role": "user", "content": query}]
@@ -150,6 +171,7 @@ Remember:
                         tool_result=tool_result,
                         tool_use_id=tool_use_id,
                         model=model,
+                        detected_lang=detected_lang,  # Pass the detected language
                     )
 
                     return {
@@ -193,6 +215,7 @@ Remember:
         tool_result: str,
         tool_use_id: str,
         model: str = None,
+        detected_lang: str = "en",  # Add detected_lang parameter with default to English
     ) -> Dict[str, Any]:
         """
         Generate a final response using tool results.
@@ -204,6 +227,7 @@ Remember:
             tool_result: Result returned by the tool
             tool_use_id: The ID of the tool use request
             model: Optional model override
+            detected_lang: The detected language of the query (defaults to English)
 
         Returns:
             Dictionary containing response text and metadata
@@ -216,12 +240,20 @@ Remember:
             model = model or settings.model_name
 
             # Enhanced system prompt for final response generation
-            system_prompt = """You are a helpful assistant that generates responses based STRICTLY on document search results and tool outputs.
+            system_prompt = f"""You are a helpful assistant that generates responses based STRICTLY on document search results and tool outputs.
+
+CRITICAL INSTRUCTIONS:
+1. YOU MUST RESPOND IN {detected_lang.upper()} LANGUAGE
+2. If query is in German, respond in German
+3. If query is in English, respond in English
+4. Match the language of the user's query exactly
 
 Core Principles:
 1. Use ONLY information found in the searched documents
-2. Every response must begin with "Based on the searched documents..."
-3. Every claim must have a document reference
+2. Begin with "Basierend auf den verfügbaren Dokumenten..." for German queries
+3. Begin with "Based on the available documents..." for English queries
+4. Every claim must have a document reference
+5. Format response in the user's language ({detected_lang})
 
 Instructions for Response Generation:
 
@@ -233,11 +265,12 @@ Instructions for Response Generation:
    - Consider completeness of document coverage
 
 2. Response Structure:
-   - Begin EVERY response with "Based on the searched documents..."
+   - Begin with appropriate language prefix based on {detected_lang}
    - Include specific document references for EVERY claim
    - Always cite relevance scores with document references
    - Clearly state when information is not found
    - Maintain logical organization of information
+   - ENSURE response is in {detected_lang} language
 
 3. Quality Control:
    - Verify each statement has document support
@@ -257,7 +290,8 @@ Remember:
 - Never assume information exists without finding it
 - Always provide document references
 - Be transparent about search limitations
-- Maintain strict evidence-based responses"""
+- Maintain strict evidence-based responses
+- YOU MUST RESPOND IN {detected_lang.upper()} LANGUAGE"""
 
             # Format the messages including the tool result
             messages = [
